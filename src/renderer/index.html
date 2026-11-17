@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="id" data-theme="synthwave" data-fx="full" data-scan="1" data-float="0" data-pet="1">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; connect-src 'none'; media-src 'none'; object-src 'none'" />
+  <title>Pocket Notch</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="island" class="island" data-view="idle" data-tab="home" data-playing="0">
+    <i class="ear l"></i><i class="ear r"></i>
+    <div class="bubble" id="bubble"><b id="bubbleName"></b><span id="bubbleText"></span></div>
+    <div class="clip">
+      <div class="grid-floor"></div>
+
+      <!-- IDLE: jam -->
+      <section class="view v-idle"><span class="pet-slot pet-sm" data-pet></span><span class="idle-time" id="idleTime">00:00</span></section>
+
+      <!-- MINI: musik sedang diputar -->
+      <section class="view v-mini">
+        <span class="pet-slot pet-sm" data-pet></span>
+        <div class="eq"><i></i><i></i><i></i><i></i></div>
+        <div class="mini-text"><span id="miniText"></span></div>
+        <span class="mini-time" id="miniTime"></span>
+      </section>
+
+      <!-- NOTIFIKASI -->
+      <section class="view v-notif" id="notif" data-type="info">
+        <div class="n-icon" id="nIcon"></div>
+        <div class="n-body">
+          <div class="n-title" id="nTitle"></div>
+          <div class="n-msg" id="nMsg"></div>
+        </div>
+        <div class="n-app" id="nApp"></div>
+        <div class="n-bar"><i id="nBar"></i></div>
+      </section>
+
+      <!-- HUD: volume, brightness, mic, caps -->
+      <section class="view v-hud" id="hud" data-kind="volume" data-muted="0">
+        <div class="h-icon" id="hIcon"></div>
+        <div class="h-label" id="hLabel">VOL</div>
+        <div class="h-bar"><i id="hFill"></i></div>
+        <div class="h-val" id="hVal">0</div>
+      </section>
+
+      <!-- PANEL: tab -->
+      <section class="view v-panel">
+        <header class="p-head">
+          <nav class="tabs" id="tabs">
+            <button data-tab="home">HOME</button>
+            <button data-tab="music">MUSIC</button>
+            <button data-tab="ai">AI</button>
+            <button data-tab="inbox">INBOX<b class="badge" id="badge" hidden>0</b></button>
+          </nav>
+          <div class="p-actions">
+            <button class="ico" id="btnPin" title="Pin (tetap terbuka)"></button>
+            <button class="ico" id="btnSettings" title="Settings"></button>
+            <button class="ico" id="btnClose" title="Tutup (Esc)"></button>
+          </div>
+        </header>
+
+        <!-- HOME -->
+        <div class="tab t-home">
+          <div class="home-top">
+            <button class="pet-slot pet-lg" data-pet id="homePet" title="Colek"></button>
+            <div class="home-clock">
+              <div class="home-time" id="homeTime">00:00</div>
+              <div class="home-date" id="homeDate"></div>
+            </div>
+          </div>
+          <div class="home-say" id="homeSay"></div>
+          <div class="home-now" id="homeNow"></div>
+          <div class="home-btns">
+            <button class="btn" data-go="music">MUSIK</button>
+            <button class="btn" data-go="ai">AI AGENT</button>
+            <button class="btn" data-go="inbox">INBOX</button>
+          </div>
+          <div class="home-upd" id="homeUpd"></div>
+        </div>
+
+        <!-- MUSIC -->
+        <div class="tab t-music">
+          <div class="m-top">
+            <div class="cover"><img id="coverImg" alt="" hidden /><span class="cover-ph" id="coverPh">♪</span></div>
+            <div class="m-info">
+              <div class="m-title"><span id="mTitle">Tidak ada musik</span></div>
+              <div class="m-artist" id="mArtist">Putar lagu di Spotify / YouTube / dll</div>
+              <div class="m-app" id="mApp"></div>
+              <div class="m-ctrl">
+                <button class="ico big" id="cPrev" title="Sebelumnya"></button>
+                <button class="ico big main" id="cPlay" title="Play / Pause"></button>
+                <button class="ico big" id="cNext" title="Berikutnya"></button>
+                <div class="eq eq-lg"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+              </div>
+            </div>
+          </div>
+          <div class="m-prog">
+            <span id="mCur">0:00</span>
+            <div class="bar" id="mBar"><i id="mFill"></i></div>
+            <span id="mDur">0:00</span>
+          </div>
+          <div class="lyrics">
+            <div class="ly prev" id="lyPrev"></div>
+            <div class="ly cur" id="lyCur"></div>
+            <div class="ly next" id="lyNext"></div>
+          </div>
+        </div>
+
+        <!-- AI -->
+        <div class="tab t-ai">
+          <div class="ai-log" id="aiLog"></div>
+          <div class="ai-chips" id="aiChips">
+            <button data-q="Lagu apa yang sedang diputar?">Now playing?</button>
+            <button data-q="Lanjut ke lagu berikutnya">Next lagu</button>
+            <button data-q="Set timer 5 menit">Timer 5 menit</button>
+            <button data-q="Jam berapa sekarang?">Jam?</button>
+            <button class="clear" id="aiClear">CLEAR</button>
+          </div>
+          <form class="ai-form" id="aiForm" autocomplete="off">
+            <span class="prompt">&gt;</span>
+            <textarea id="aiInput" rows="1" maxlength="2000" placeholder="Tanya atau perintahkan agen…"></textarea>
+            <button class="btn send" type="submit" id="aiSend">SEND</button>
+          </form>
+        </div>
+
+        <!-- INBOX -->
+        <div class="tab t-inbox">
+          <div class="inbox-head"><span id="inboxCount">0 notifikasi</span><button class="btn small" id="inboxClear">CLEAR</button></div>
+          <div class="inbox-list" id="inboxList"></div>
+        </div>
+      </section>
+    </div>
+  </div>
+  <span class="mini-measure" id="miniMeasure"></span>
+  <script src="../shared/personas.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
