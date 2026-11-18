@@ -52,6 +52,7 @@
             <button data-tab="music">MUSIC</button>
             <button data-tab="ai">AI</button>
             <button data-tab="inbox">INBOX<b class="badge" id="badge" hidden>0</b></button>
+            <button data-tab="shelf">SHELF<b class="badge" id="shelfBadge" hidden>0</b></button>
           </nav>
           <div class="p-actions">
             <button class="ico" id="btnPin" title="Pin (tetap terbuka)"></button>
@@ -122,6 +123,13 @@
             <textarea id="aiInput" rows="1" maxlength="2000" placeholder="Tanya atau perintahkan agen…"></textarea>
             <button class="btn send" type="submit" id="aiSend">SEND</button>
           </form>
+        </div>
+
+        <!-- SHELF -->
+        <div class="tab t-shelf">
+          <div class="inbox-head"><span id="shelfCount">0 file</span><button class="btn small" id="shelfClear">CLEAR</button></div>
+          <div class="shelf-list" id="shelfList"></div>
+          <div class="shelf-hint" id="shelfHint">⇩ seret file ke notch · seret item keluar untuk memakainya</div>
         </div>
 
         <!-- INBOX -->

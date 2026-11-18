@@ -66,6 +66,15 @@ if (-not $mgr) { Emit @{ error = 'smtc-unavailable' }; exit 1 }
 $lastKey = ''
 $thumbTries = 0
 $haveThumb = $false
+$curHash = ''      # hash cover yang terakhir dikirim
+$prevHash = ''     # hash cover lagu sebelumnya (untuk mengenali cover basi)
+$thumbNext = [DateTime]::MinValue
+$thumbSent = $false
+
+function Hash-Of($t) {
+  if (-not $t) { return '' }
+  return ($t.Length.ToString() + ':' + $t.Substring([Math]::Max(0, $t.Length - 80)))
+}
 
 while ($true) {
   # ---- perintah dari Electron ----
@@ -109,11 +118,26 @@ while ($true) {
     $lastKey = $key
     $thumbTries = 0
     $haveThumb = $false
+    $thumbSent = $false
+    $prevHash = $curHash
+    $thumbNext = [DateTime]::MinValue
   }
-  if (-not $haveThumb -and $thumbTries -lt 6) {
+  # Spotify sering masih memberi cover lagu sebelumnya sesaat setelah lagu ganti.
+  # Coba berulang (tiap ~1 dtk, maks 20x); kirim lagi bila cover berubah.
+  if (-not $haveThumb -and $thumbTries -lt 20 -and [DateTime]::UtcNow -ge $thumbNext) {
     $thumbTries++
-    $thumb = Get-Thumb $props
-    if ($thumb) { $haveThumb = $true }
+    $thumbNext = [DateTime]::UtcNow.AddSeconds(1)
+    $t = Get-Thumb $props
+    if ($t) {
+      $h = Hash-Of $t
+      if ($h -ne $curHash) {
+        $thumb = $t; $curHash = $h; $thumbSent = $true
+        if ($h -ne $prevHash) { $haveThumb = $true }
+      } elseif (-not $thumbSent -and $thumbTries -ge 6) {
+        # cover sama dengan lagu sebelumnya (album yang sama): kirim ulang untuk lagu ini
+        $thumb = $t; $thumbSent = $true; $haveThumb = $true
+      }
+    }
   }
 
   $pb = $s.GetPlaybackInfo()

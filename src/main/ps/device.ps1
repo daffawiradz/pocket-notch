@@ -69,6 +69,43 @@ public static class Audio {
   }
 }
 
+public static class Fs {
+  [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
+  [StructLayout(LayoutKind.Sequential)] public struct MONITORINFO { public int cbSize; public RECT rcMonitor; public RECT rcWork; public int dwFlags; }
+  [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr h, uint flags);
+  [DllImport("user32.dll")] static extern bool GetMonitorInfo(IntPtr m, ref MONITORINFO mi);
+  [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr h, int i);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, System.Text.StringBuilder sb, int n);
+  [DllImport("shell32.dll")] static extern int SHQueryUserNotificationState(out int s);
+
+  // Hasil: "" (tidak ada fullscreen) atau "L,T,R,B" = kotak monitor (piksel fisik) tempat aplikasi fullscreen.
+  public static string Check() {
+    try {
+      IntPtr h = GetForegroundWindow();
+      if (h == IntPtr.Zero) return "";
+      System.Text.StringBuilder sb = new System.Text.StringBuilder(64);
+      GetClassName(h, sb, 64);
+      string cls = sb.ToString();
+      if (cls == "Progman" || cls == "WorkerW" || cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd") return "";
+      IntPtr mon = MonitorFromWindow(h, 2);
+      MONITORINFO mi = new MONITORINFO(); mi.cbSize = Marshal.SizeOf(typeof(MONITORINFO));
+      if (mon == IntPtr.Zero || !GetMonitorInfo(mon, ref mi)) return "";
+      RECT r; if (!GetWindowRect(h, out r)) return "";
+      bool covers = r.L <= mi.rcMonitor.L && r.T <= mi.rcMonitor.T && r.R >= mi.rcMonitor.R && r.B >= mi.rcMonitor.B;
+      int style = GetWindowLong(h, -16);
+      bool caption = (style & 0x00C00000) == 0x00C00000;
+      int qs = 0; SHQueryUserNotificationState(out qs);
+      bool shellSays = (qs == 2 || qs == 3 || qs == 4); // busy / D3D fullscreen / presentation
+      if ((covers && !caption) || (covers && shellSays)) {
+        return mi.rcMonitor.L + "," + mi.rcMonitor.T + "," + mi.rcMonitor.R + "," + mi.rcMonitor.B;
+      }
+      return "";
+    } catch (Exception) { return ""; }
+  }
+}
+
 public static class Keys {
   [DllImport("user32.dll")] public static extern short GetKeyState(int k);
 }
@@ -157,7 +194,7 @@ function Get-Bt {
   return $names
 }
 
-$enabled = @{ audio = $true; brightness = $true; net = $true; bt = $true; power = $true; drive = $true; caps = $true }
+$enabled = @{ fs = $true; audio = $true; brightness = $true; net = $true; bt = $true; power = $true; drive = $true; caps = $true }
 $seen = @{}          # grup yang sudah punya pembacaan pertama (init)
 $last = @{}
 $tick = 0
@@ -211,6 +248,18 @@ while ($true) {
       } else { Diag 'mic' ("capture: " + [Audio]::Err) }
       $seen.audio = $true
     } catch { Diag 'audio' $_.Exception.Message }
+  }
+
+  # ---- aplikasi fullscreen (tiap ~1 dtk) ----
+  if ($enabled.fs -and ($tick % 2 -eq 0)) {
+    try {
+      $f = [Fs]::Check()
+      if ($f -ne $last.fs) {
+        $last.fs = $f
+        if ($f) { $q = $f.Split(','); Emit @{ ev = 'fullscreen'; on = $true; l = [int]$q[0]; t = [int]$q[1]; r = [int]$q[2]; b = [int]$q[3] } }
+        else { Emit @{ ev = 'fullscreen'; on = $false } }
+      }
+    } catch { Diag 'fullscreen' $_.Exception.Message }
   }
 
   # ---- caps lock ----

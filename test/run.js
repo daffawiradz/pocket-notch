@@ -6,6 +6,9 @@ const { parseLrc, normalize, fetchLyrics, _setFetch } = require('../src/main/lyr
 const { createServer, normalize: normN } = require('../src/main/notify-server');
 const ai = require('../src/main/ai');
 const PX = require('../src/shared/personas');
+const { Shelf } = require('../src/main/shelf');
+const { findArt, pick: pickArt, _setFetch: setArtFetch } = require('../src/main/art');
+const { isInside, validRect } = require('../src/main/hit');
 const { createRouter, SAMPLES } = require('../src/main/device-router');
 
 let pass = 0;
@@ -182,6 +185,68 @@ const t = async (name, fn) => {
     out.flush = () => { out.timers.splice(0).forEach((f) => f && f()); };
     return out;
   };
+
+  await t('hit-test kursor: di dalam/luar island, offset jendela, rect tidak valid', () => {
+    const b = { x: 640, y: 0, width: 640, height: 470 };
+    const rect = { l: 200, t: 0, r: 440, b: 40 };
+    assert.ok(isInside({ x: 640 + 300, y: 20 }, b, rect));
+    assert.ok(!isInside({ x: 640 + 100, y: 20 }, b, rect));
+    assert.ok(!isInside({ x: 640 + 300, y: 100 }, b, rect));
+    assert.ok(isInside({ x: 640 + 198, y: 20 }, b, rect, 4));
+    assert.ok(!isInside({ x: 1, y: 1 }, b, null));
+    assert.ok(validRect(rect) && !validRect({ l: NaN, t: 0, r: 1, b: 1 }) && !validRect(null));
+  });
+
+  await t('shelf: salin, daftar, batas jumlah, kedaluwarsa, hapus', async () => {
+    const fs = require('fs');
+    const os = require('os');
+    const path = require('path');
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'shelf-'));
+    const src = path.join(tmp, 'src');
+    fs.mkdirSync(path.join(src, 'folder'), { recursive: true });
+    fs.writeFileSync(path.join(src, 'a.txt'), 'halo');
+    fs.writeFileSync(path.join(src, 'folder', 'b.txt'), 'dunia');
+    const cfg = { keepHours: 1, maxItems: 3 };
+    const sh = new Shelf({ dir: path.join(tmp, 'shelf'), getCfg: () => cfg });
+    const added = await sh.add([path.join(src, 'a.txt'), path.join(src, 'folder'), path.join(src, 'tidak-ada.txt')]);
+    assert.strictEqual(added.length, 2);
+    assert.strictEqual(fs.readFileSync(sh.pathOf(added[0].id), 'utf8'), 'halo');
+    fs.unlinkSync(path.join(src, 'a.txt')); // file asal hilang -> salinan tetap ada
+    assert.ok(fs.existsSync(sh.pathOf(added[0].id)));
+    assert.ok(sh.list().find((i) => i.isDir && i.size === 5));
+    for (let n = 0; n < 3; n++) { fs.writeFileSync(path.join(src, `x${n}.txt`), 'x'); await sh.add([path.join(src, `x${n}.txt`)]); }
+    assert.strictEqual(sh.list().length, 3);
+    const sh2 = new Shelf({ dir: path.join(tmp, 'shelf'), getCfg: () => cfg }); // persisten
+    assert.strictEqual(sh2.list().length, 3);
+    assert.ok(await sh2.cleanup(Date.now() + 2 * 3600 * 1000));
+    assert.strictEqual(sh2.list().length, 0);
+    await sh2.add([path.join(src, 'x0.txt')]);
+    const id = sh2.list()[0].id;
+    await sh2.remove(id);
+    assert.strictEqual(sh2.pathOf(id), null);
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  await t('art: pilih cover dengan judul/artis/album cocok', () => {
+    const r = [
+      { trackName: 'Abu', artistName: 'Perunggu', collectionName: 'Single', artworkUrl100: 'https://x/a/100x100bb.jpg' },
+      { trackName: 'Abu', artistName: 'Perunggu', collectionName: 'Album Baru', artworkUrl100: 'https://x/b/100x100bb.jpg' },
+      { trackName: 'Lagu Lain', artistName: 'Perunggu', collectionName: 'Album Baru', artworkUrl100: 'https://x/c/100x100bb.jpg' },
+    ];
+    assert.ok(pickArt(r, { title: 'Abu', artist: 'Perunggu', album: 'Album Baru' }).artworkUrl100.includes('/b/'));
+    assert.strictEqual(pickArt(r, { title: 'Tidak Ada', artist: 'Perunggu', album: '' }), null);
+  });
+
+  await t('art: findArt mengubah ukuran URL dan mengembalikan data URL', async () => {
+    setArtFetch(async (url) => {
+      if (String(url).includes('itunes.apple.com/search')) return { ok: true, json: async () => ({ results: [{ trackName: 'Abu', artistName: 'Perunggu', collectionName: 'X', artworkUrl100: 'https://img/z/100x100bb.jpg' }] }) };
+      assert.ok(String(url).includes('/512x512bb.jpg'), url);
+      return { ok: true, arrayBuffer: async () => new Uint8Array(900).buffer };
+    });
+    const out = await findArt({ title: 'Abu', artist: 'Perunggu', album: 'X' });
+    assert.ok(out.startsWith('data:image/jpeg;base64,'));
+    setArtFetch(null);
+  });
 
   await t('router: event init tidak memicu popup', () => {
     const o = mkRouter();

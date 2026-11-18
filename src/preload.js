@@ -1,5 +1,5 @@
 'use strict';
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 const on = (channel, cb) => {
   const fn = (_e, ...args) => cb(...args);
@@ -18,6 +18,18 @@ contextBridge.exposeInMainWorld('notch', {
   onSettings: (cb) => on('settings', cb),
   onToggleAI: (cb) => on('shortcut:toggle-ai', cb),
   onUpdate: (cb) => on('update', cb),
+  // shelf (file sementara)
+  pathsOf: (files) => Array.from(files || []).map((f) => { try { return webUtils.getPathForFile(f); } catch (_) { return ''; } }).filter(Boolean),
+  shelfAdd: (paths) => ipcRenderer.invoke('shelf:add', paths),
+  shelfList: () => ipcRenderer.invoke('shelf:list'),
+  shelfRemove: (id) => ipcRenderer.send('shelf:remove', id),
+  shelfClear: () => ipcRenderer.send('shelf:clear'),
+  shelfOpen: (id) => ipcRenderer.send('shelf:open', id),
+  shelfDrag: (id) => ipcRenderer.send('shelf:drag', id),
+  onShelf: (cb) => on('shelf:items', cb),
+  onThumb: (cb) => on('media:thumb', cb),
+  reportRect: (r) => ipcRenderer.send('overlay:rect', r),
+  onHover: (cb) => on('overlay:hover', cb),
   onHud: (cb) => on('device:hud', cb),
   testDevice: (kind) => ipcRenderer.send('device:test', kind),
   mediaCmd: (cmd, arg) => ipcRenderer.send('media:cmd', cmd, arg),

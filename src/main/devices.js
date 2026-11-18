@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 const { EventEmitter } = require('events');
 
-const GROUPS = ['audio', 'brightness', 'net', 'bt', 'power', 'drive', 'caps'];
+const GROUPS = ['fs', 'audio', 'brightness', 'net', 'bt', 'power', 'drive', 'caps'];
 
 class Devices extends EventEmitter {
   constructor({ enabled = true } = {}) {

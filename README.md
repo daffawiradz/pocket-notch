@@ -89,3 +89,15 @@ Catatan teknis:
 - Wi-Fi putus sesaat (roaming) diabaikan 4 detik agar tidak spam.
 - Kecerahan hanya bekerja di laptop dengan WMI `WmiMonitorBrightness` (monitor eksternal tidak didukung).
 - Tombol tes tiap event ada di Pengaturan → DEVELOPER (aktifkan dengan 7× klik versi).
+
+## Shelf (file sementara)
+
+Seret file/folder ke notch → panel otomatis membuka tab **SHELF** dan file disalin ke folder penyimpanan sementara. Seret item keluar untuk memakainya di aplikasi lain (email, chat, folder, dsb.), klik 2× untuk membuka, `×` untuk menghapus.
+
+- File **disalin**, jadi aman walau file asal dipindah/dihapus. Lokasi: `%APPDATA%\Pocket Notch\shelf`.
+- Kedaluwarsa otomatis (default 24 jam, maks 20 item). Atur di Pengaturan → `// SHELF`.
+
+## Fullscreen & cover album
+
+- Notch otomatis **disembunyikan** saat ada aplikasi fullscreen (game, video, presentasi) di monitor yang sama dengan notch, dan muncul lagi setelah keluar. Bisa dimatikan di Pengaturan → DISPLAY.
+- Cover now playing mengikuti album lagu. Bila Windows/Spotify belum memberi gambar, P-Notch mencarinya online (iTunes Search) lalu memakainya.

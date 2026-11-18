@@ -19,6 +19,8 @@
     next: svg('<path d="M5 5l10 7-10 7z"/><rect x="17" y="5" width="2.6" height="14" rx="1"/>', true),
     prev: svg('<path d="M19 5L9 12l10 7z"/><rect x="4.4" y="5" width="2.6" height="14" rx="1"/>', true),
     gear: svg('<circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/>'),
+    file: svg('<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/>'),
+    folder: svg('<path d="M3 6h7l2 2h9v11H3z"/>'),
     pin: svg('<path d="M9 3h6l-1 6 3 3v2H7v-2l3-3z"/><path d="M12 14v7"/>'),
     wifi: svg('<path d="M2.5 9a14 14 0 0 1 19 0"/><path d="M5.5 12.5a9.5 9.5 0 0 1 13 0"/><path d="M8.7 16a5 5 0 0 1 6.6 0"/><path d="M12 19.5v.01"/>'),
     wifioff: svg('<path d="M5.5 12.5a9.5 9.5 0 0 1 4-2.4"/><path d="M8.7 16a5 5 0 0 1 6.6 0"/><path d="M12 19.5v.01"/><path d="M3 3l18 18"/>'),
@@ -546,7 +548,7 @@
   // ───────────────────────── panel open / close ─────────────────────────
   let expandT = null;
   let collapseT = null;
-  const holdOpen = () => state.pinned || (state.tab === 'ai' && (document.activeElement === aiInput || state.ai.busy));
+  const holdOpen = () => state.pinned || state.dragging || (state.tab === 'ai' && (document.activeElement === aiInput || state.ai.busy));
 
   function setTab(t) {
     state.tab = t;
@@ -563,6 +565,7 @@
       requestAnimationFrame(fitTitle);
     }
     if (t === 'home') updateHome();
+    if (t === 'shelf') renderShelf();
     render();
   }
 
@@ -608,11 +611,22 @@
   function setOver(over) {
     if (over === state.over) return;
     state.over = over;
-    api.setIgnoreMouse(!over);
     if (over) scheduleExpand();
     else if (state.expanded) scheduleCollapse();
     else clearTimeout(expandT);
   }
+
+  // main process melakukan hit-test kursor (andal berjam-jam) dan memberi tahu kita
+  api.onHover((inside) => setOver(!!inside));
+  function sendRect() {
+    const r = island.getBoundingClientRect();
+    api.reportRect({ l: r.left, t: r.top, r: r.right, b: r.bottom });
+  }
+  if (window.ResizeObserver) new ResizeObserver(sendRect).observe(island);
+  island.addEventListener('transitionend', sendRect);
+  window.addEventListener('resize', sendRect);
+  setInterval(sendRect, 2000);
+  sendRect();
 
   document.addEventListener('mousemove', (e) => {
     const r = island.getBoundingClientRect();
@@ -712,13 +726,31 @@
     if (state.update && state.update.status === 'ready') api.installUpdate();
   });
 
+  let thumbClearT = null;
+  api.onThumb((t) => {
+    if (!t || t.key !== state.media.key) return;
+    state.thumb = t.thumb;
+    state.thumbKey = t.key;
+    updateMediaStatic();
+  });
+
   api.onMedia((m) => {
     const keyChanged = (m.key || '') !== (state.media.key || '');
     if (m.thumb) {
       state.thumb = m.thumb;
       state.thumbKey = m.key;
     }
-    if (keyChanged && m.key !== state.thumbKey) state.thumb = null;
+    if (keyChanged && m.key !== state.thumbKey) {
+      // cover lama dipertahankan sebentar (album sama / cover baru menyusul); dibuang bila tak kunjung datang
+      const k = m.key;
+      clearTimeout(thumbClearT);
+      thumbClearT = setTimeout(() => {
+        if (state.media.key === k && state.thumbKey !== k) {
+          state.thumb = null;
+          updateMediaStatic();
+        }
+      }, 12000);
+    }
     const wasPlaying = playing();
     state.media = m;
     state.mediaAt = performance.now();
@@ -930,6 +962,92 @@
     aiLog.textContent = '';
   });
 
+
+  // ───────────────────────── Shelf: file sementara ─────────────────────────
+  state.shelf = [];
+  const fmtBytes = (b) => (b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(0)} KB` : b < 1073741824 ? `${(b / 1048576).toFixed(1)} MB` : `${(b / 1073741824).toFixed(2)} GB`);
+
+  function renderShelf() {
+    const list = $('#shelfList');
+    list.textContent = '';
+    for (const it of state.shelf) {
+      const row = document.createElement('div');
+      row.className = 'sh-item';
+      row.draggable = true;
+      row.title = 'Seret keluar untuk memakai · klik 2x untuk membuka';
+      const ic = document.createElement('div');
+      ic.className = 'n-icon';
+      ic.innerHTML = it.isDir ? ICON.folder : ICON.file;
+      const body = document.createElement('div');
+      body.className = 'n-body';
+      const nm = document.createElement('div');
+      nm.className = 'n-title';
+      nm.textContent = it.name;
+      const meta = document.createElement('div');
+      meta.className = 'n-msg';
+      meta.textContent = `${fmtBytes(it.size)} · ${ago(it.added)}`;
+      body.append(nm, meta);
+      const x = document.createElement('button');
+      x.className = 'ico sh-x';
+      x.innerHTML = ICON.x;
+      x.title = 'Hapus dari shelf';
+      x.addEventListener('click', (e) => {
+        e.stopPropagation();
+        api.shelfRemove(it.id);
+      });
+      row.append(ic, body, x);
+      row.addEventListener('dragstart', (e) => {
+        e.preventDefault();
+        api.shelfDrag(it.id);
+      });
+      row.addEventListener('dblclick', () => api.shelfOpen(it.id));
+      list.append(row);
+    }
+    $('#shelfCount').textContent = `${state.shelf.length} file`;
+    const b = $('#shelfBadge');
+    b.textContent = state.shelf.length;
+    b.hidden = !state.shelf.length;
+  }
+
+  api.onShelf((items) => {
+    state.shelf = items || [];
+    renderShelf();
+  });
+  $('#shelfClear').addEventListener('click', () => api.shelfClear());
+
+  const hasFiles = (e) => !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+  let dragDepth = 0;
+  const endDrag = () => {
+    dragDepth = 0;
+    state.dragging = false;
+    island.classList.remove('dropping');
+  };
+  document.addEventListener('dragenter', (e) => {
+    if (!hasFiles(e) || !(state.s && state.s.shelf && state.s.shelf.enabled)) return;
+    e.preventDefault();
+    dragDepth++;
+    state.dragging = true;
+    island.classList.add('dropping');
+    openPanel('shelf');
+  });
+  document.addEventListener('dragover', (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  });
+  document.addEventListener('dragleave', () => {
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) endDrag();
+  });
+  document.addEventListener('drop', async (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    const paths = api.pathsOf(e.dataTransfer.files);
+    endDrag();
+    if (!paths.length) return;
+    const n = await api.shelfAdd(paths);
+    if (n) pet.react('happy', 1800);
+  });
 
   // ───────────────────────── HUD perangkat ─────────────────────────
   let hudT = null;

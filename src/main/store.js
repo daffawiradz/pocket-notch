@@ -40,6 +40,8 @@ const DEFAULTS = {
   scanlines: true,
   glow: 1,
   hoverExpand: true,
+  hideOnFullscreen: true,
+  shelf: { enabled: true, keepHours: 24, maxItems: 20 },
   miniMusic: true,
   showLyricsMini: true,
   lyricOffset: 0, // ms
@@ -194,6 +196,10 @@ class Store {
     if (!['full', 'lite'].includes(d.effects)) d.effects = 'full';
     if (!['anthropic', 'openai'].includes(d.ai.provider)) d.ai.provider = 'anthropic';
     d.devices.lowBattery = Math.round(num(d.devices.lowBattery, 5, 50, 20));
+    d.hideOnFullscreen = d.hideOnFullscreen !== false;
+    d.shelf.enabled = d.shelf.enabled !== false;
+    d.shelf.keepHours = Math.round(num(d.shelf.keepHours, 1, 720, 24));
+    d.shelf.maxItems = Math.round(num(d.shelf.maxItems, 3, 50, 20));
     d.notchHeight = num(d.notchHeight, 24, 42, 30);
     d.miniMaxWidth = num(d.miniMaxWidth, 380, 600, 560);
     if (!['poki', 'nova', 'glitch'].includes(d.pet.persona)) d.pet.persona = 'poki';
