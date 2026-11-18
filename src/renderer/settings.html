@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="id" data-theme="synthwave">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; connect-src 'none'; object-src 'none'" />
+  <title>Pocket Notch — Settings</title>
+  <link rel="stylesheet" href="settings.css" />
+</head>
+<body>
+  <div class="drag"><span>POCKET NOTCH</span></div>
+  <main>
+    <h1>SETTINGS <small id="ver" title=""></small><span class="saved" id="saved">SAVED ✓</span></h1>
+
+    <section>
+      <h2>// DISPLAY & POSISI</h2>
+      <label>Monitor
+        <select data-k="display" id="displaySel"></select>
+      </label>
+      <label>Geser horizontal (px) <output></output>
+        <input type="range" data-k="offsetX" min="-1200" max="1200" step="10" />
+      </label>
+      <label>Geser vertikal (px) <output></output>
+        <input type="range" data-k="offsetY" min="0" max="200" step="2" />
+      </label>
+      <label class="chk"><input type="checkbox" data-k="floating" /> Mode melayang (dynamic island). Mati = menempel di tepi atas (notch)</label>
+    </section>
+
+    <section>
+      <h2>// UKURAN NOTCH</h2>
+      <label>Tinggi notch (px) <output></output>
+        <input type="range" data-k="notchHeight" min="24" max="42" step="1" />
+      </label>
+      <label>Lebar maksimum mini player (px) <output></output>
+        <input type="range" data-k="miniMaxWidth" min="380" max="600" step="10" />
+      </label>
+      <label class="chk"><input type="checkbox" data-k="miniAuto" /> Lebar otomatis mengikuti panjang lirik</label>
+    </section>
+
+    <section>
+      <h2>// KARAKTER</h2>
+      <label class="chk"><input type="checkbox" data-k="pet.enabled" /> Tampilkan karakter pendamping di notch</label>
+      <label>Persona
+        <select data-k="pet.persona">
+          <option value="poki">Poki — ceria &amp; penyemangat</option>
+          <option value="nova">Nova — tenang &amp; efisien</option>
+          <option value="glitch">Glitch — jahil &amp; sarkas ringan</option>
+        </select>
+      </label>
+      <label>Nama karakter (opsional) <input type="text" data-k="pet.name" maxlength="16" placeholder="kosong = nama bawaan" /></label>
+      <label>Karakter memanggil kamu dengan <input type="text" data-k="pet.userName" maxlength="24" placeholder="mis. Kak Rina" /></label>
+      <label>Gaya bicara
+        <select data-k="pet.chatter">
+          <option value="normal">Ngobrol (reaksi, tips, sapaan)</option>
+          <option value="quiet">Tenang (sapaan &amp; pengingat saja)</option>
+          <option value="off">Diam (hanya saat dicolek / chat AI)</option>
+        </select>
+      </label>
+      <label>Pengingat sehat tiap (menit, 0 = mati) <output></output>
+        <input type="range" data-k="pet.reminderMin" min="0" max="120" step="5" />
+      </label>
+      <p class="hint">Pengingat: minum, peregangan, istirahat mata. Persona juga dipakai saat chat dengan AI Agent.</p>
+    </section>
+
+    <section>
+      <h2>// TAMPILAN & ANIMASI</h2>
+      <label>Tema neon
+        <select data-k="theme">
+          <option value="synthwave">Synthwave (magenta / cyan)</option>
+          <option value="cyber">Cyber (cyan / biru)</option>
+          <option value="matrix">Matrix (hijau)</option>
+          <option value="amber">Amber (oranye retro)</option>
+        </select>
+      </label>
+      <label>Efek
+        <select data-k="effects">
+          <option value="full">Full (border berputar, grid, equalizer)</option>
+          <option value="lite">Lite (hemat GPU / baterai)</option>
+        </select>
+      </label>
+      <label>Kecepatan animasi <output></output>
+        <input type="range" data-k="animSpeed" min="0.5" max="2" step="0.1" />
+      </label>
+      <label>Intensitas glow <output></output>
+        <input type="range" data-k="glow" min="0" max="2" step="0.1" />
+      </label>
+      <label class="chk"><input type="checkbox" data-k="scanlines" /> Scanline CRT</label>
+      <label class="chk"><input type="checkbox" data-k="hoverExpand" /> Buka panel saat kursor di atas notch (mati = klik)</label>
+      <label class="chk"><input type="checkbox" data-k="hideOnFullscreen" /> Sembunyikan notch saat ada aplikasi fullscreen di monitor ini</label>
+      <label class="chk"><input type="checkbox" data-k="clock24" /> Jam 24 jam</label>
+      <label class="chk"><input type="checkbox" data-k="showSeconds" /> Tampilkan detik</label>
+    </section>
+
+    <section>
+      <h2>// PERANGKAT</h2>
+      <p class="hint">Tampilkan di notch saat terjadi perubahan pada laptop:</p>
+      <label class="chk"><input type="checkbox" data-k="devices.wifi" /> Wi-Fi / jaringan tersambung &amp; terputus</label>
+      <label class="chk"><input type="checkbox" data-k="devices.bluetooth" /> Bluetooth tersambung &amp; terputus</label>
+      <label class="chk"><input type="checkbox" data-k="devices.volume" /> Indikator volume &amp; mute</label>
+      <label class="chk"><input type="checkbox" data-k="devices.mic" /> Indikator mikrofon (mute / aktif)</label>
+      <label class="chk"><input type="checkbox" data-k="devices.audioOut" /> Output audio berganti (headset, speaker)</label>
+      <label class="chk"><input type="checkbox" data-k="devices.brightness" /> Indikator kecerahan layar</label>
+      <label class="chk"><input type="checkbox" data-k="devices.battery" /> Baterai: charger, baterai rendah, penuh</label>
+      <label class="chk"><input type="checkbox" data-k="devices.usb" /> USB drive terpasang &amp; dilepas</label>
+      <label class="chk"><input type="checkbox" data-k="devices.capslock" /> Caps Lock</label>
+      <label class="chk"><input type="checkbox" data-k="devices.display" /> Monitor tersambung &amp; dilepas</label>
+      <label>Peringatan baterai rendah di (%) <output></output>
+        <input type="range" data-k="devices.lowBattery" min="5" max="50" step="5" />
+      </label>
+    </section>
+
+    <section>
+      <h2>// SHELF (FILE SEMENTARA)</h2>
+      <p class="hint">Seret file ke notch untuk menyimpannya sementara, lalu seret keluar ke aplikasi lain. File disalin, jadi aman walau file asal dipindah.</p>
+      <label class="chk"><input type="checkbox" data-k="shelf.enabled" /> Aktifkan Shelf</label>
+      <label>Simpan selama (jam) <output></output>
+        <input type="range" data-k="shelf.keepHours" min="1" max="168" step="1" />
+      </label>
+      <label>Maksimal item <output></output>
+        <input type="range" data-k="shelf.maxItems" min="3" max="50" step="1" />
+      </label>
+    </section>
+
+    <section>
+      <h2>// MUSIK & LIRIK</h2>
+      <label class="chk"><input type="checkbox" data-k="miniMusic" /> Mini player di notch saat musik diputar</label>
+      <label class="chk"><input type="checkbox" data-k="showLyricsMini" /> Tampilkan lirik tersinkron di mini player</label>
+      <label>Offset lirik (ms) <output></output>
+        <input type="range" data-k="lyricOffset" min="-3000" max="3000" step="50" />
+      </label>
+      <p class="hint">Sumber lagu: Windows Media Session (Spotify, YouTube di browser, VLC, dll). Lirik: LRCLIB.</p>
+    </section>
+
+    <section>
+      <h2>// NOTIFIKASI</h2>
+      <label>Durasi popup (detik) <output></output>
+        <input type="range" data-k="notifDuration" min="2" max="15" step="1" />
+      </label>
+      <label class="chk"><input type="checkbox" data-k="sound" /> Suara retro</label>
+      <p class="hint">Aplikasi atau bot lain bisa mengirim popup pesan ke P-Notch. Riwayatnya ada di tab INBOX.</p>
+    </section>
+
+    <section>
+      <h2>// AI AGENT</h2>
+      <label>Provider
+        <select data-k="ai.provider" id="provider">
+          <option value="anthropic">Anthropic (Claude)</option>
+          <option value="openai">OpenAI-compatible (OpenAI / OpenRouter / Ollama)</option>
+        </select>
+      </label>
+      <div class="grp" data-for="anthropic">
+        <label>Anthropic API key <input type="password" data-k="ai.anthropicKey" placeholder="sk-ant-..." /></label>
+        <label>Model <input type="text" data-k="ai.anthropicModel" /></label>
+      </div>
+      <div class="grp" data-for="openai">
+        <label>Base URL <input type="text" data-k="ai.openaiBaseUrl" /></label>
+        <label>API key <input type="password" data-k="ai.openaiKey" placeholder="sk-..." /></label>
+        <label>Model <input type="text" data-k="ai.openaiModel" /></label>
+      </div>
+      <label>System prompt <textarea data-k="ai.system" rows="3"></textarea></label>
+      <label>Shortcut global <input type="text" data-k="shortcut" placeholder="Control+Alt+Space" /></label>
+      <p class="hint">API key dienkripsi (Windows DPAPI). Agen bisa mengontrol musik, mengatur timer, menampilkan notifikasi, dan membuka link.</p>
+    </section>
+
+    <section>
+      <h2>// SISTEM & UPDATE</h2>
+      <label class="chk"><input type="checkbox" data-k="autoLaunch" /> Jalankan saat Windows start</label>
+      <label class="chk"><input type="checkbox" data-k="autoUpdate" /> Unduh update otomatis</label>
+      <div class="row">
+        <button class="btn" id="btnUpd">CEK UPDATE</button>
+        <span id="updStatus" class="hint"></span>
+      </div>
+      <div class="row" id="uninstallRow" hidden>
+        <button class="btn danger" id="btnUninstall">UNINSTALL P-NOTCH</button>
+      </div>
+    </section>
+
+    <section data-dev>
+      <h2>// DEVELOPER</h2>
+      <label>Port webhook <input type="number" data-k="port" min="1024" max="65535" /></label>
+      <label>Token (opsional)
+        <input type="password" data-k="token" placeholder="kosong = tanpa token" />
+      </label>
+      <pre class="code" id="curl"></pre>
+      <div class="row">
+        <button class="btn" id="tSent">TES: TERKIRIM</button>
+        <button class="btn" id="tRecv">TES: MASUK</button>
+        <button class="btn" id="tErr">TES: ERROR</button>
+      </div>
+      <div class="row">
+        <button class="btn" id="dWifi">TES: WIFI</button>
+        <button class="btn" id="dWifiOff">TES: WIFI PUTUS</button>
+        <button class="btn" id="dBt">TES: BLUETOOTH</button>
+        <button class="btn" id="dBat">TES: BATERAI</button>
+        <button class="btn" id="dChg">TES: CHARGER</button>
+        <button class="btn" id="dUsb">TES: USB</button>
+        <button class="btn" id="dVol">TES: VOLUME</button>
+        <button class="btn" id="dMic">TES: MIC</button>
+        <button class="btn" id="dCaps">TES: CAPS</button>
+        <button class="btn" id="dBri">TES: BRIGHTNESS</button>
+        <button class="btn" id="dOut">TES: OUTPUT AUDIO</button>
+      </div>
+      <div class="row">
+        <button class="btn" id="btnDevOff" hidden>MATIKAN MODE DEVELOPER</button>
+      </div>
+      <p class="hint">Mode developer otomatis aktif saat dijalankan dari source. Di versi terpasang: klik nomor versi 7 kali.</p>
+    </section>
+  </main>
+  <script src="settings.js"></script>
+</body>
+</html>

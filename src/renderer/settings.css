@@ -1,0 +1,49 @@
+@font-face { font-family: 'VT323'; src: url(fonts/vt323.woff2) format('woff2'); }
+@font-face { font-family: 'PS2P'; src: url(fonts/press-start-2p.woff2) format('woff2'); }
+
+:root { --c1: #ff2bd6; --c2: #00f0ff; --ink: #f4eaff; --dim: #9b8bb8; --bg: #07050f; --ok: #39ff14; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: var(--bg); color: var(--ink); font-family: 'VT323', monospace; font-size: 21px; height: 100%; }
+body { overflow-y: auto; }
+body::before { content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 10;
+  background: repeating-linear-gradient(0deg, rgba(255,255,255,.025) 0 1px, transparent 1px 3px); }
+
+.drag { -webkit-app-region: drag; height: 36px; display: flex; align-items: center; padding-left: 16px; position: sticky; top: 0; background: var(--bg); z-index: 5;
+  font-family: 'PS2P'; font-size: 8px; color: var(--c1); text-shadow: 0 0 8px var(--c1); letter-spacing: 2px; }
+main { max-width: 720px; margin: 0 auto; padding: 8px 24px 60px; }
+h1 { font-family: 'PS2P'; font-size: 16px; color: var(--c2); text-shadow: 0 0 12px var(--c2); margin: 12px 0 22px; display: flex; align-items: baseline; gap: 14px; }
+h1 small { font-size: 8px; color: var(--dim); text-shadow: none; }
+.saved { margin-left: auto; font-size: 8px; color: var(--ok); text-shadow: 0 0 8px var(--ok); opacity: 0; transition: opacity .3s; }
+.saved.show { opacity: 1; }
+
+section { border: 1.5px solid color-mix(in srgb, var(--c1) 65%, transparent); border-radius: 14px; padding: 16px 20px 18px; margin-bottom: 20px;
+  background: rgba(255,255,255,.02); box-shadow: 0 0 16px color-mix(in srgb, var(--c1) 18%, transparent); display: flex; flex-direction: column; gap: 12px; }
+h2 { font-family: 'PS2P'; font-size: 9px; color: var(--c1); text-shadow: 0 0 8px var(--c1); letter-spacing: 1px; }
+label { display: flex; flex-direction: column; gap: 4px; color: var(--dim); }
+label.chk { flex-direction: row; align-items: center; gap: 10px; color: var(--ink); cursor: pointer; }
+output { color: var(--c2); margin-left: 6px; }
+.hint { color: var(--dim); font-size: 18px; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.grp { display: none; flex-direction: column; gap: 12px; }
+.grp.on { display: flex; }
+
+input[type=text], input[type=password], input[type=number], select, textarea {
+  background: #0b0716; color: var(--ink); border: 1.5px solid rgba(255,255,255,.2); border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 21px; outline: none; transition: border-color .2s, box-shadow .2s; }
+input:focus, select:focus, textarea:focus { border-color: var(--c2); box-shadow: 0 0 12px color-mix(in srgb, var(--c2) 50%, transparent); }
+select option { background: #0b0716; }
+textarea { resize: vertical; }
+input[type=checkbox] { appearance: none; width: 20px; height: 20px; border: 1.5px solid var(--c1); border-radius: 5px; display: grid; place-items: center; flex: none; cursor: pointer; background: #0b0716; }
+input[type=checkbox]:checked { background: var(--c1); box-shadow: 0 0 10px var(--c1); }
+input[type=checkbox]:checked::after { content: ''; width: 5px; height: 10px; border: solid #fff; border-width: 0 2.5px 2.5px 0; transform: rotate(45deg) translate(-1px, -1px); }
+input[type=range] { appearance: none; height: 6px; border-radius: 3px; background: rgba(255,255,255,.14); }
+input[type=range]::-webkit-slider-thumb { appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--c2); box-shadow: 0 0 10px var(--c2); cursor: pointer; }
+
+.btn { font-family: 'PS2P'; font-size: 8px; letter-spacing: 1px; padding: 10px 12px; border: 1.5px solid var(--c1); color: var(--c1); background: none; border-radius: 6px; cursor: pointer; text-shadow: 0 0 6px currentColor; transition: all .2s; }
+.btn:hover { background: color-mix(in srgb, var(--c1) 18%, transparent); box-shadow: 0 0 12px color-mix(in srgb, var(--c1) 60%, transparent); }
+.code { background: #0b0716; border: 1px dashed rgba(255,255,255,.25); border-radius: 8px; padding: 8px 12px; font-family: 'VT323', monospace; font-size: 18px; color: var(--c2); white-space: pre-wrap; word-break: break-all; user-select: text; }
+::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-thumb { background: var(--c1); border-radius: 4px; }
+
+body:not(.dev) [data-dev] { display: none; }
+.btn.danger { border-color: #ff3b5c; color: #ff3b5c; }
+.btn.danger:hover { background: rgba(255,59,92,.16); box-shadow: 0 0 12px rgba(255,59,92,.6); }
+h1 small { cursor: default; user-select: none; }
