@@ -60,7 +60,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "daffawiradz",
+        "owner": "GANTI_USERNAME_GITHUB",
         "repo": "pocket-notch",
         "releaseType": "release"
       }

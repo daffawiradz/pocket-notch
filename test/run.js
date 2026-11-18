@@ -2,7 +2,7 @@
 // Test logika murni (tanpa Electron): node test/run.js
 const assert = require('assert');
 const http = require('http');
-const { parseLrc, normalize } = require('../src/main/lyrics');
+const { parseLrc, normalize, fetchLyrics, _setFetch } = require('../src/main/lyrics');
 const { createServer, normalize: normN } = require('../src/main/notify-server');
 const ai = require('../src/main/ai');
 const PX = require('../src/shared/personas');
@@ -26,6 +26,28 @@ const t = async (name, fn) => {
     const n = normalize({ title: 'Daft Punk - Get Lucky (Official Video)', artist: 'Daft Punk VEVO', album: '' });
     assert.strictEqual(n.title, 'Get Lucky');
     assert.strictEqual(n.artist, 'Daft Punk');
+  });
+
+  await t('normalize: tidak merusak "(Birthday)", buang akhiran Remastered', () => {
+    assert.strictEqual(normalize({ title: 'Dance (Birthday Mix)', artist: 'X', album: '' }).title, 'Dance (Birthday Mix)');
+    assert.strictEqual(normalize({ title: 'Song - Remastered 2011', artist: 'X', album: '' }).title, 'Song');
+    assert.strictEqual(normalize({ title: 'Song - 2009 Remaster', artist: 'X', album: '' }).title, 'Song');
+    assert.strictEqual(normalize({ title: 'Song (feat. Y)', artist: 'X', album: '' }).title, 'Song');
+  });
+
+  await t('lyrics: pilih versi durasi cocok, tolak lagu/durasi lain', async () => {
+    const mk = (id, name, artist, duration, synced = '[00:01.00]x') => ({ id, trackName: name, artistName: artist, duration, syncedLyrics: synced });
+    const db = [mk(1, 'Song', 'Band', 300), mk(2, 'Song', 'Band', 215), mk(3, 'Song Other', 'Band', 215), mk(4, 'Song', 'Band', 216, null)];
+    _setFetch(async (url) => {
+      const u = new URL(url);
+      if (u.pathname.endsWith('/get')) return { ok: false, json: async () => null };
+      return { ok: true, json: async () => db };
+    });
+    const r = await fetchLyrics({ title: 'Song - Remastered 2011', artist: 'Band, Guest', album: 'Deluxe', dur: 214 });
+    assert.strictEqual(r.id, 2);
+    const none = await fetchLyrics({ title: 'Song', artist: 'Band', album: '', dur: 90 });
+    assert.strictEqual(none, null);
+    _setFetch(null);
   });
 
   await t('normalize spotify keeps fields', () => {
