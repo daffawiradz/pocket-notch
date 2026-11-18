@@ -1,7 +1,7 @@
 {
   "name": "pocket-notch",
   "productName": "Pocket Notch",
-  "version": "1.0.4",
+  "version": "1.0.3",
   "description": "Pocket Notch (P-Notch): dynamic-island / notch interaktif untuk Windows dengan tema retro neon dan karakter pendamping",
   "main": "src/main/main.js",
   "author": "Kyousa",

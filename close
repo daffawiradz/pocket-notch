@@ -1,0 +1,115 @@
+[1mdiff --git a/.github/workflows/release.yml b/.github/workflows/release.yml[m
+[1mindex d2a8001..8dd9f3e 100644[m
+[1m--- a/.github/workflows/release.yml[m
+[1m+++ b/.github/workflows/release.yml[m
+[36m@@ -10,14 +10,13 @@[m [mpermissions:[m
+   contents: write[m
+ [m
+ concurrency:[m
+[31m-  group: release[m
+[32m+[m[32m  group: pocket-notch-release[m
+   cancel-in-progress: false[m
+ [m
+ jobs:[m
+[31m-  release-windows:[m
+[31m-    name: Build and Publish Windows Release[m
+[32m+[m[32m  release:[m
+     runs-on: windows-latest[m
+[31m-    timeout-minutes: 40[m
+[32m+[m[32m    timeout-minutes: 45[m
+ [m
+     steps:[m
+       - name: Checkout repository[m
+[36m@@ -32,16 +31,15 @@[m [mjobs:[m
+       - name: Install dependencies[m
+         run: npm ci[m
+ [m
+[31m-      - name: Validate version tag[m
+[32m+[m[32m      - name: Validate release version[m
+         shell: pwsh[m
+         run: |[m
+           $version = node -p "require('./package.json').version"[m
+[31m-          $expectedTag = "v$version"[m
+[31m-          if ($env:GITHUB_REF_NAME -cne $expectedTag) {[m
+[31m-            throw "Tag must match package version: $expectedTag"[m
+[32m+[m[32m          if ($env:GITHUB_REF_NAME -cne "v$version") {[m
+[32m+[m[32m            throw "Tag and package.json version mismatch"[m
+           }[m
+ [m
+[31m-      - name: Run automated tests[m
+[32m+[m[32m      - name: Run tests[m
+         run: npm test[m
+ [m
+       - name: Build and publish release[m
+[36m@@ -49,3 +47,39 @@[m [mjobs:[m
+         env:[m
+           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}[m
+           CSC_IDENTITY_AUTO_DISCOVERY: "false"[m
+[32m+[m
+[32m+[m[32m      - name: Verify local update metadata[m
+[32m+[m[32m        shell: pwsh[m
+[32m+[m[32m        run: |[m
+[32m+[m[32m          if (!(Test-Path "dist/latest.yml")) {[m
+[32m+[m[32m            throw "latest.yml was not generated"[m
+[32m+[m[32m          }[m
+[32m+[m[32m          if (!(Get-ChildItem "dist/*.exe")) {[m
+[32m+[m[32m            throw "Windows installer was not generated"[m
+[32m+[m[32m          }[m
+[32m+[m
+[32m+[m[32m      - name: Verify GitHub Release assets[m
+[32m+[m[32m        shell: pwsh[m
+[32m+[m[32m        env:[m
+[32m+[m[32m          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}[m
+[32m+[m[32m        run: |[m
+[32m+[m[32m          $tag = $env:GITHUB_REF_NAME[m
+[32m+[m[32m          $assets = @([m
+[32m+[m[32m            gh release view $tag `[m
+[32m+[m[32m              --json assets `[m
+[32m+[m[32m              --jq '.assets[].name'[m
+[32m+[m[32m          )[m
+[32m+[m
+[32m+[m[32m          $assets | ForEach-Object { Write-Host $_ }[m
+[32m+[m
+[32m+[m[32m          if ($LASTEXITCODE -ne 0) {[m
+[32m+[m[32m            throw "Unable to inspect GitHub Release"[m
+[32m+[m[32m          }[m
+[32m+[m
+[32m+[m[32m          if ("latest.yml" -notin $assets) {[m
+[32m+[m[32m            throw "latest.yml missing from GitHub Release"[m
+[32m+[m[32m          }[m
+[32m+[m
+[32m+[m[32m          if (!($assets | Where-Object { $_ -match '\.exe$' })) {[m
+[32m+[m[32m            throw "Windows installer missing from Release"[m
+[32m+[m[32m          }[m
+[1mdiff --git a/package-lock.json b/package-lock.json[m
+[1mindex 728e538..6740c06 100644[m
+[1m--- a/package-lock.json[m
+[1m+++ b/package-lock.json[m
+[36m@@ -1,12 +1,12 @@[m
+ {[m
+   "name": "pocket-notch",[m
+[31m-  "version": "1.0.3",[m
+[32m+[m[32m  "version": "1.0.4",[m
+   "lockfileVersion": 3,[m
+   "requires": true,[m
+   "packages": {[m
+     "": {[m
+       "name": "pocket-notch",[m
+[31m-      "version": "1.0.3",[m
+[32m+[m[32m      "version": "1.0.4",[m
+       "license": "MIT",[m
+       "dependencies": {[m
+         "electron-updater": "^6.3.9"[m
+[1mdiff --git a/package.json b/package.json[m
+[1mindex 5eff891..7840a66 100644[m
+[1m--- a/package.json[m
+[1m+++ b/package.json[m
+[36m@@ -1,7 +1,7 @@[m
+ {[m
+   "name": "pocket-notch",[m
+   "productName": "Pocket Notch",[m
+[31m-  "version": "1.0.3",[m
+[32m+[m[32m  "version": "1.0.4",[m
+   "description": "Pocket Notch (P-Notch): dynamic-island / notch interaktif untuk Windows dengan tema retro neon dan karakter pendamping",[m
+   "main": "src/main/main.js",[m
+   "author": "Kyousa",[m
