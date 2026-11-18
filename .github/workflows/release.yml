@@ -10,14 +10,13 @@ permissions:
   contents: write
 
 concurrency:
-  group: release
+  group: pocket-notch-release
   cancel-in-progress: false
 
 jobs:
-  release-windows:
-    name: Build and Publish Windows Release
+  release:
     runs-on: windows-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
 
     steps:
       - name: Checkout repository
@@ -32,16 +31,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Validate version tag
+      - name: Validate release version
         shell: pwsh
         run: |
           $version = node -p "require('./package.json').version"
-          $expectedTag = "v$version"
-          if ($env:GITHUB_REF_NAME -cne $expectedTag) {
-            throw "Tag must match package version: $expectedTag"
+          if ($env:GITHUB_REF_NAME -cne "v$version") {
+            throw "Tag and package.json version mismatch"
           }
 
-      - name: Run automated tests
+      - name: Run tests
         run: npm test
 
       - name: Build and publish release
@@ -49,3 +47,39 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Verify local update metadata
+        shell: pwsh
+        run: |
+          if (!(Test-Path "dist/latest.yml")) {
+            throw "latest.yml was not generated"
+          }
+          if (!(Get-ChildItem "dist/*.exe")) {
+            throw "Windows installer was not generated"
+          }
+
+      - name: Verify GitHub Release assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $assets = @(
+            gh release view $tag `
+              --json assets `
+              --jq '.assets[].name'
+          )
+
+          $assets | ForEach-Object { Write-Host $_ }
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Unable to inspect GitHub Release"
+          }
+
+          if ("latest.yml" -notin $assets) {
+            throw "latest.yml missing from GitHub Release"
+          }
+
+          if (!($assets | Where-Object { $_ -match '\.exe$' })) {
+            throw "Windows installer missing from Release"
+          }
