@@ -628,11 +628,6 @@
   setInterval(sendRect, 2000);
   sendRect();
 
-  document.addEventListener('mousemove', (e) => {
-    const r = island.getBoundingClientRect();
-    setOver(e.clientX >= r.left - 2 && e.clientX <= r.right + 2 && e.clientY >= r.top - 2 && e.clientY <= r.bottom + 2);
-  });
-  document.documentElement.addEventListener('mouseleave', () => setOver(false));
   window.addEventListener('blur', () => {
     if (state.expanded && !state.pinned && !state.over) closePanel();
   });

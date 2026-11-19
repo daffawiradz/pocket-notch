@@ -240,7 +240,9 @@ function createOverlay() {
     },
   });
   overlay.setAlwaysOnTop(true, 'screen-saver');
-  overlay.setIgnoreMouseEvents(true, { forward: true });
+  // Klik-tembus TANPA 'forward': hook penerus mousemove milik Electron di Windows bisa macet.
+  // Deteksi hover dilakukan pollCursor() di bawah, jadi forward tidak diperlukan.
+  overlay.setIgnoreMouseEvents(true);
   hoverNow = false;
   watchWindow(overlay, 'overlay');
   overlay.setMenuBarVisibility(false);
@@ -309,16 +311,20 @@ let hoverNow = false;
 function pollCursor() {
   if (!overlay || overlay.isDestroyed() || fsHidden || !overlay.isVisible() || !islandRect) return;
   const inside = isInside(screen.getCursorScreenPoint(), overlay.getBounds(), islandRect, 4);
-  if (inside === hoverNow) return;
+  if (inside === hoverNow) {
+    // tegaskan terus selama kursor di atas island: bila status jendela pernah macet, pulih dalam 50 ms
+    if (inside) overlay.setIgnoreMouseEvents(false);
+    return;
+  }
   hoverNow = inside;
-  overlay.setIgnoreMouseEvents(!inside, { forward: true });
+  overlay.setIgnoreMouseEvents(!inside);
   send(overlay, 'overlay:hover', inside);
 }
 
 // tegaskan ulang status klik-tembus & topmost (mis. setelah sleep, lock layar, ganti monitor)
 function reassertMouse() {
   if (!overlay || overlay.isDestroyed()) return;
-  overlay.setIgnoreMouseEvents(!hoverNow, { forward: true });
+  overlay.setIgnoreMouseEvents(!hoverNow);
 }
 
 function openSettings() {
