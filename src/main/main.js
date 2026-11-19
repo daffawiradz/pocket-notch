@@ -307,16 +307,35 @@ function applyFullscreenState() {
 let hoverTimer = null;
 let islandRect = null;
 let hoverNow = false;
+let lastInput = 0; // kapan renderer terakhir benar-benar menerima input mouse
+let insideSince = 0;
+let lastCursor = null;
+let moveStart = 0; // awal gerakan kursor yang tidak terputus
+let lastHeal = 0;
 
 function pollCursor() {
   if (!overlay || overlay.isDestroyed() || fsHidden || !overlay.isVisible() || !islandRect) return;
-  const inside = isInside(screen.getCursorScreenPoint(), overlay.getBounds(), islandRect, 4);
+  const cur = screen.getCursorScreenPoint();
+  const inside = isInside(cur, overlay.getBounds(), islandRect, 4);
+  const now = Date.now();
+  const moved = !lastCursor || lastCursor.x !== cur.x || lastCursor.y !== cur.y;
+  lastCursor = cur;
+  if (moved) {
+    if (!moveStart) moveStart = now;
+  } else moveStart = 0;
   if (inside === hoverNow) {
-    // tegaskan terus selama kursor di atas island: bila status jendela pernah macet, pulih dalam 50 ms
-    if (inside) overlay.setIgnoreMouseEvents(false);
+    // Pengawas: kursor bergerak di atas island tetapi renderer tidak menerima input apa pun
+    // = jendela macet (klik tembus). Bangun ulang overlay dan catat ke app.log.
+    if (inside && moveStart && now - moveStart > 700 && lastInput < moveStart && now - lastHeal > 5000) {
+      lastHeal = now;
+      log('[main] input macet: kursor bergerak ' + (now - moveStart) + ' ms di atas island tanpa input, overlay dibangun ulang');
+      recreateOverlay();
+    }
     return;
   }
   hoverNow = inside;
+  insideSince = now;
+  lastInput = now;
   overlay.setIgnoreMouseEvents(!inside);
   send(overlay, 'overlay:hover', inside);
 }
@@ -507,6 +526,9 @@ function setupIpc() {
     if (shelf) send(overlay, 'shelf:items', shelf.list());
   });
 
+  ipcMain.on('overlay:input', (e) => {
+    if (overlay && e.sender === overlay.webContents) lastInput = Date.now();
+  });
   ipcMain.on('overlay:rect', (e, r) => {
     if (overlay && e.sender === overlay.webContents && validRect(r)) islandRect = r;
   });

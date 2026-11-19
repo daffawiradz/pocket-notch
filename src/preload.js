@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('notch', {
   onShelf: (cb) => on('shelf:items', cb),
   onThumb: (cb) => on('media:thumb', cb),
   reportRect: (r) => ipcRenderer.send('overlay:rect', r),
+  inputSeen: () => ipcRenderer.send('overlay:input'),
   onHover: (cb) => on('overlay:hover', cb),
   onHud: (cb) => on('device:hud', cb),
   testDevice: (kind) => ipcRenderer.send('device:test', kind),

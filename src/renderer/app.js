@@ -618,6 +618,17 @@
 
   // main process melakukan hit-test kursor (andal berjam-jam) dan memberi tahu kita
   api.onHover((inside) => setOver(!!inside));
+  // bukti ke main bahwa input mouse benar-benar sampai ke halaman (dipakai pengawas anti-macet)
+  let inputT = 0;
+  const seen = () => {
+    const t = performance.now();
+    if (t - inputT > 150) {
+      inputT = t;
+      api.inputSeen();
+    }
+  };
+  island.addEventListener('mousemove', seen);
+  island.addEventListener('pointerdown', seen, true);
   function sendRect() {
     const r = island.getBoundingClientRect();
     api.reportRect({ l: r.left, t: r.top, r: r.right, b: r.bottom });
