@@ -1,5 +1,5 @@
 'use strict';
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 const on = (channel, cb) => {
   const fn = (_e, ...args) => cb(...args);
@@ -10,7 +10,6 @@ const on = (channel, cb) => {
 contextBridge.exposeInMainWorld('notch', {
   // overlay
   ready: () => ipcRenderer.send('overlay:ready'),
-  setIgnoreMouse: (v) => ipcRenderer.send('overlay:ignore', !!v),
   setFocusable: (v) => ipcRenderer.send('overlay:focusable', !!v),
   onMedia: (cb) => on('media:state', cb),
   onLyrics: (cb) => on('media:lyrics', cb),
@@ -18,6 +17,19 @@ contextBridge.exposeInMainWorld('notch', {
   onSettings: (cb) => on('settings', cb),
   onToggleAI: (cb) => on('shortcut:toggle-ai', cb),
   onUpdate: (cb) => on('update', cb),
+  // shelf (file sementara)
+  // FileList tidak bisa melewati contextBridge (jadi objek kosong), jadi path diambil per File
+  pathOf: (file) => { try { return webUtils.getPathForFile(file); } catch (_) { return ''; } },
+  shelfAdd: (paths) => ipcRenderer.invoke('shelf:add', paths),
+  shelfList: () => ipcRenderer.invoke('shelf:list'),
+  shelfRemove: (id) => ipcRenderer.send('shelf:remove', id),
+  shelfClear: () => ipcRenderer.send('shelf:clear'),
+  shelfOpen: (id) => ipcRenderer.send('shelf:open', id),
+  shelfDrag: (id) => ipcRenderer.send('shelf:drag', id),
+  onShelf: (cb) => on('shelf:items', cb),
+  onThumb: (cb) => on('media:thumb', cb),
+  reportRect: (r) => ipcRenderer.send('overlay:rect', r),
+  onHover: (cb) => on('overlay:hover', cb),
   onHud: (cb) => on('device:hud', cb),
   testDevice: (kind) => ipcRenderer.send('device:test', kind),
   mediaCmd: (cmd, arg) => ipcRenderer.send('media:cmd', cmd, arg),

@@ -1,22 +1,85 @@
-name: Release
+
+name: Pocket Notch - Release
 
 on:
   push:
-    tags: ['v*']
+    tags:
+      - 'v*'
 
 permissions:
   contents: write
 
+concurrency:
+  group: pocket-notch-release
+  cancel-in-progress: false
+
 jobs:
-  build:
+  release:
     runs-on: windows-latest
+    timeout-minutes: 45
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: '22'
           cache: npm
-      - run: npm ci
-      - run: npm run release
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate release version
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          if ($env:GITHUB_REF_NAME -cne "v$version") {
+            throw "Tag and package.json version mismatch"
+          }
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build and publish release
+        run: npm run release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Verify local update metadata
+        shell: pwsh
+        run: |
+          if (!(Test-Path "dist/latest.yml")) {
+            throw "latest.yml was not generated"
+          }
+          if (!(Get-ChildItem "dist/*.exe")) {
+            throw "Windows installer was not generated"
+          }
+
+      - name: Verify GitHub Release assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $assets = @(
+            gh release view $tag `
+              --json assets `
+              --jq '.assets[].name'
+          )
+
+          $assets | ForEach-Object { Write-Host $_ }
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Unable to inspect GitHub Release"
+          }
+
+          if ("latest.yml" -notin $assets) {
+            throw "latest.yml missing from GitHub Release"
+          }
+
+          if (!($assets | Where-Object { $_ -match '\.exe$' })) {
+            throw "Windows installer missing from Release"
+          }

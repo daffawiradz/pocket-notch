@@ -3,18 +3,21 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const {
-  app, BrowserWindow, Tray, Menu, screen, ipcMain, globalShortcut, shell, nativeImage, dialog,
+  app, BrowserWindow, Tray, Menu, screen, ipcMain, globalShortcut, shell, nativeImage, dialog, powerMonitor,
 } = require('electron');
 
 const { Store } = require('./store');
 const { Media } = require('./media');
 const { fetchLyrics } = require('./lyrics');
+const { findArt } = require('./art');
+const { Shelf } = require('./shelf');
 const { createServer } = require('./notify-server');
 const ai = require('./ai');
 const personas = require('../shared/personas');
 const { createUpdater } = require('./updater');
 const { Devices } = require('./devices');
 const { createRouter, SAMPLES } = require('./device-router');
+const { isInside, validRect } = require('./hit');
 
 const MOCK = process.argv.includes('--mock');
 const WIN_W = 640;
@@ -27,6 +30,9 @@ if (!app.requestSingleInstanceLock()) {
 
 let store;
 let overlay = null;
+let artTimer = null;
+let shelf = null;
+const shelfIcons = new Map(); // id -> nativeImage (ikon file untuk drag)
 let settingsWin = null;
 let tray = null;
 let media;
@@ -94,6 +100,7 @@ function syncDeviceGroups() {
     power: !!d.battery,
     drive: !!d.usb,
     caps: !!d.capslock,
+    fs: !!store.get().hideOnFullscreen,
   });
 }
 
@@ -117,6 +124,63 @@ function placeOverlay() {
 }
 
 // ───────────────────────── windows ─────────────────────────
+// ───────────────────────── shelf (file sementara) ─────────────────────────
+function shelfChanged() {
+  send(overlay, 'shelf:items', shelf.list());
+  for (const i of shelf.list()) {
+    if (shelfIcons.has(i.id)) continue;
+    shelfIcons.set(i.id, null);
+    app.getFileIcon(shelf.pathOf(i.id), { size: 'normal' }).then((img) => shelfIcons.set(i.id, img)).catch(() => {});
+  }
+}
+
+function fallbackDragIcon() {
+  const p = path.join(__dirname, '..', '..', 'assets', 'tray.png');
+  const img = nativeImage.createFromPath(p);
+  return img.isEmpty() ? nativeImage.createEmpty() : img.resize({ width: 32, height: 32 });
+}
+
+function setupShelf() {
+  shelf = new Shelf({ dir: path.join(app.getPath('userData'), 'shelf'), getCfg: () => store.get().shelf });
+  const sweep = () => shelf.cleanup().then((ch) => ch && shelfChanged()).catch(() => {});
+  sweep();
+  setInterval(sweep, 10 * 60 * 1000);
+  const fromOverlay = (e) => overlay && e.sender === overlay.webContents;
+
+  ipcMain.handle('shelf:list', (e) => (fromOverlay(e) ? shelf.list() : []));
+  ipcMain.handle('shelf:add', async (e, paths) => {
+    if (!fromOverlay(e) || !store.get().shelf.enabled || !Array.isArray(paths)) return [];
+    const added = await shelf.add(paths.slice(0, 50).map(String));
+    shelfChanged();
+    return added.length;
+  });
+  ipcMain.on('shelf:remove', async (e, id) => {
+    if (!fromOverlay(e)) return;
+    await shelf.remove(String(id));
+    shelfIcons.delete(id);
+    shelfChanged();
+  });
+  ipcMain.on('shelf:clear', async (e) => {
+    if (!fromOverlay(e)) return;
+    await shelf.clear();
+    shelfIcons.clear();
+    shelfChanged();
+  });
+  ipcMain.on('shelf:open', (e, id) => {
+    const p = fromOverlay(e) && shelf.pathOf(String(id));
+    if (p) shell.openPath(p);
+  });
+  ipcMain.on('shelf:drag', async (e, id) => {
+    if (!fromOverlay(e)) return;
+    const p = shelf.pathOf(String(id));
+    if (!p) return;
+    let icon = shelfIcons.get(id);
+    if (!icon || icon.isEmpty()) icon = await app.getFileIcon(p, { size: 'normal' }).catch(() => null);
+    if (!icon || icon.isEmpty()) icon = fallbackDragIcon();
+    e.sender.startDrag({ file: p, icon });
+  });
+}
+
 function createOverlay() {
   overlay = new BrowserWindow({
     width: WIN_W,
@@ -145,18 +209,83 @@ function createOverlay() {
   });
   overlay.setAlwaysOnTop(true, 'screen-saver');
   overlay.setIgnoreMouseEvents(true, { forward: true });
+  hoverNow = false;
   overlay.setMenuBarVisibility(false);
   overlay.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   overlay.webContents.on('will-navigate', (e) => e.preventDefault());
   placeOverlay();
   overlay.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
-  overlay.once('ready-to-show', () => overlay.showInactive());
+  overlay.once('ready-to-show', () => {
+    if (!fsHidden) overlay.showInactive();
+  });
   if (process.argv.includes('--dev')) overlay.webContents.openDevTools({ mode: 'detach' });
 
   clearInterval(topmostTimer);
   topmostTimer = setInterval(() => {
     if (overlay && !overlay.isDestroyed() && overlay.isVisible()) overlay.setAlwaysOnTop(true, 'screen-saver');
+    reassertMouse();
   }, 10000);
+
+  // Hit-test dari proses utama: tidak bergantung pada mousemove yang "diteruskan" Electron,
+  // yang di Windows bisa berhenti setelah berjam-jam / sleep / lock layar (tombol jadi mati).
+  clearInterval(hoverTimer);
+  hoverTimer = setInterval(pollCursor, 50);
+}
+
+function recreateOverlay() {
+  const old = overlay;
+  islandRect = null;
+  hoverNow = false;
+  createOverlay();
+  if (old && !old.isDestroyed()) old.destroy();
+}
+
+let fsHidden = false; // overlay disembunyikan karena ada aplikasi fullscreen di monitor yang sama
+let fsInfo = null; // { l, t, r, b } kotak monitor (piksel fisik) bila ada aplikasi fullscreen
+
+// apakah aplikasi fullscreen berada di monitor tempat notch?
+function fullscreenOnNotchDisplay() {
+  if (!fsInfo || !store.get().hideOnFullscreen) return false;
+  try {
+    const c = screen.screenToDipPoint({ x: Math.round((fsInfo.l + fsInfo.r) / 2), y: Math.round((fsInfo.t + fsInfo.b) / 2) });
+    return screen.getDisplayNearestPoint(c).id === pickDisplay().id;
+  } catch (_) {
+    return false;
+  }
+}
+
+function applyFullscreenState() {
+  if (!overlay || overlay.isDestroyed()) return;
+  const hide = fullscreenOnNotchDisplay();
+  if (hide === fsHidden) return;
+  fsHidden = hide;
+  if (hide) {
+    hoverNow = false;
+    overlay.hide();
+  } else {
+    placeOverlay();
+    overlay.showInactive();
+    overlay.setAlwaysOnTop(true, 'screen-saver');
+  }
+}
+
+let hoverTimer = null;
+let islandRect = null;
+let hoverNow = false;
+
+function pollCursor() {
+  if (!overlay || overlay.isDestroyed() || fsHidden || !overlay.isVisible() || !islandRect) return;
+  const inside = isInside(screen.getCursorScreenPoint(), overlay.getBounds(), islandRect, 4);
+  if (inside === hoverNow) return;
+  hoverNow = inside;
+  overlay.setIgnoreMouseEvents(!inside, { forward: true });
+  send(overlay, 'overlay:hover', inside);
+}
+
+// tegaskan ulang status klik-tembus & topmost (mis. setelah sleep, lock layar, ganti monitor)
+function reassertMouse() {
+  if (!overlay || overlay.isDestroyed()) return;
+  overlay.setIgnoreMouseEvents(!hoverNow, { forward: true });
 }
 
 function openSettings() {
@@ -243,7 +372,6 @@ function createTray() {
 }
 
 // ───────────────────────── settings apply ─────────────────────────
-let prevPort = null;
 let prevShortcut = null;
 
 function registerShortcut() {
@@ -262,7 +390,6 @@ function registerShortcut() {
 async function startServer() {
   const s = store.get();
   const ok = await notifyServer.start(s.port);
-  prevPort = s.port;
   if (!ok) {
     setTimeout(() => notify({ id: 'e' + Date.now(), title: 'Integrasi notifikasi nonaktif', message: 'Port ' + s.port + ' dipakai aplikasi lain.', type: 'warn', app: 'Pocket Notch', icon: '', duration: 8, time: Date.now() }), 2500);
   }
@@ -281,6 +408,7 @@ function applySettings(patch) {
   }
   buildTray();
   if (devices) syncDeviceGroups();
+  applyFullscreenState();
 }
 
 function testNotify(type = 'sent') {
@@ -304,6 +432,18 @@ function onMediaState(s) {
 
   if (key !== lastKey) {
     lastKey = key;
+    clearTimeout(artTimer);
+    if (key && s.title) {
+      // bila Windows tidak memberi cover dalam beberapa detik, cari cover album online
+      artTimer = setTimeout(async () => {
+        if (lastKey !== key || (lastThumb && lastThumb.key === key)) return;
+        const art = await findArt({ title: s.title, artist: s.artist, album: s.album });
+        if (art && lastKey === key && !(lastThumb && lastThumb.key === key)) {
+          lastThumb = { key, thumb: art };
+          send(overlay, 'media:thumb', { key, thumb: art });
+        }
+      }, 3500);
+    }
     lastLyrics = { key, lines: null, loading: !!key };
     send(overlay, 'media:lyrics', lastLyrics);
     if (key && s.title) {
@@ -324,10 +464,11 @@ function setupIpc() {
     if (lastMedia.active) send(overlay, 'media:state', { ...lastMedia, thumb: lastThumb && lastThumb.key === lastMedia.key ? lastThumb.thumb : null });
     if (lastLyrics) send(overlay, 'media:lyrics', lastLyrics);
     send(overlay, 'update', updater.state());
+    if (shelf) send(overlay, 'shelf:items', shelf.list());
   });
 
-  ipcMain.on('overlay:ignore', (e, v) => {
-    if (overlay && e.sender === overlay.webContents) overlay.setIgnoreMouseEvents(!!v, { forward: true });
+  ipcMain.on('overlay:rect', (e, r) => {
+    if (overlay && e.sender === overlay.webContents && validRect(r)) islandRect = r;
   });
 
   ipcMain.on('overlay:focusable', (e, v) => {
@@ -415,7 +556,14 @@ app.whenReady().then(async () => {
     notify: (n) => notify({ id: 'd' + Date.now() + Math.random().toString(36).slice(2, 5), icon: '', duration: 0, time: Date.now(), message: '', app: 'SISTEM', type: 'info', ...n }),
     hud: (h) => send(overlay, 'device:hud', h),
   });
-  devices.on('event', (ev) => router.handle(ev));
+  devices.on('event', (ev) => {
+    if (ev.ev === 'fullscreen') {
+      fsInfo = ev.on ? { l: ev.l, t: ev.t, r: ev.r, b: ev.b } : null;
+      applyFullscreenState();
+      return;
+    }
+    router.handle(ev);
+  });
   devices.on('diag', (d) => {
     try {
       fs.appendFileSync(path.join(app.getPath('userData'), 'device.log'), `${new Date().toISOString()} [${d.group}] ${d.msg}\n`);
@@ -431,7 +579,14 @@ app.whenReady().then(async () => {
   media.on('state', onMediaState);
   media.start();
   devices.start();
+  setupShelf();
   syncDeviceGroups();
+  for (const evt of ['resume', 'unlock-screen']) {
+    powerMonitor.on(evt, () => {
+      // bangun ulang jendela overlay: setelah sleep/lock, status klik-tembus jendela lama bisa macet
+      setTimeout(recreateOverlay, 1500);
+    });
+  }
   await startServer();
   updater.init();
   if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: !!store.get().autoLaunch, name: 'PocketNotch' });

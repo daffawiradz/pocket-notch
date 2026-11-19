@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 const { EventEmitter } = require('events');
 
-const GROUPS = ['audio', 'brightness', 'net', 'bt', 'power', 'drive', 'caps'];
+const GROUPS = ['fs', 'audio', 'brightness', 'net', 'bt', 'power', 'drive', 'caps'];
 
 class Devices extends EventEmitter {
   constructor({ enabled = true } = {}) {
@@ -22,6 +22,14 @@ class Devices extends EventEmitter {
 
   start() {
     this.stopped = false;
+    // buang skrip sementara sisa sesi yang tertutup tak wajar
+    try {
+      for (const f of fs.readdirSync(os.tmpdir())) {
+        if (/^pnotch-device-\d+\.ps1$/.test(f) && f !== `pnotch-device-${process.pid}.ps1`) fs.unlinkSync(path.join(os.tmpdir(), f));
+      }
+    } catch (_) {
+      /* abaikan */
+    }
     if (this.enabled) this._spawn();
   }
 
