@@ -46,9 +46,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release view $env:GITHUB_REF_NAME *> $null
-          if ($LASTEXITCODE -ne 0) {
-            gh release create $env:GITHUB_REF_NAME --title $env:GITHUB_REF_NAME --generate-notes
+          $ErrorActionPreference = 'Continue'
+          $tag = $env:GITHUB_REF_NAME
+          $found = (gh release list --json tagName --jq '.[].tagName') -contains $tag
+          if (-not $found) {
+            gh release create $tag --title $tag --generate-notes
             if ($LASTEXITCODE -ne 0) { throw "Failed to create release" }
           }
           $global:LASTEXITCODE = 0
