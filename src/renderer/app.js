@@ -1042,6 +1042,7 @@
   document.addEventListener('drop', async (e) => {
     if (!hasFiles(e)) return;
     e.preventDefault();
+<<<<<<< HEAD
     const files = Array.from(e.dataTransfer.files || []);
     const paths = files.map((f) => api.pathOf(f)).filter(Boolean);
     endDrag();
@@ -1050,6 +1051,11 @@
       if (files.length) pet.react('sad', 2000); // mis. file virtual dari browser/arsip: tidak punya path
       return;
     }
+=======
+    const paths = api.pathsOf(e.dataTransfer.files);
+    endDrag();
+    if (!paths.length) return;
+>>>>>>> eeb6272f1070f44086df09d881362052358964d0
     const n = await api.shelfAdd(paths);
     if (n) pet.react('happy', 1800);
   });
