@@ -18,12 +18,8 @@ contextBridge.exposeInMainWorld('notch', {
   onToggleAI: (cb) => on('shortcut:toggle-ai', cb),
   onUpdate: (cb) => on('update', cb),
   // shelf (file sementara)
-<<<<<<< HEAD
   // FileList tidak bisa melewati contextBridge (jadi objek kosong), jadi path diambil per File
   pathOf: (file) => { try { return webUtils.getPathForFile(file); } catch (_) { return ''; } },
-=======
-  pathsOf: (files) => Array.from(files || []).map((f) => { try { return webUtils.getPathForFile(f); } catch (_) { return ''; } }).filter(Boolean),
->>>>>>> eeb6272f1070f44086df09d881362052358964d0
   shelfAdd: (paths) => ipcRenderer.invoke('shelf:add', paths),
   shelfList: () => ipcRenderer.invoke('shelf:list'),
   shelfRemove: (id) => ipcRenderer.send('shelf:remove', id),

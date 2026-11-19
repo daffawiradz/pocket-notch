@@ -1,6 +1,38 @@
 'use strict';
 const path = require('path');
 const fs = require('fs');
+
+// ───────────────────────── log error (%APPDATA%\Pocket Notch\app.log) ─────────────────────────
+// Error di proses utama maupun jendela dicatat di sini supaya mudah dilacak (aplikasi tetap berjalan).
+function log(...parts) {
+  try {
+    const file = path.join(app.getPath('userData'), 'app.log');
+    try {
+      if (fs.statSync(file).size > 512 * 1024) fs.renameSync(file, file + '.old');
+    } catch (_) {
+      /* belum ada */
+    }
+    const text = parts.map((p) => (p instanceof Error ? p.stack || p.message : String(p))).join(' ');
+    fs.appendFileSync(file, `${new Date().toISOString()} ${text}\n`);
+  } catch (_) {
+    /* abaikan */
+  }
+}
+process.on('uncaughtException', (e) => log('[main] uncaughtException', e));
+process.on('unhandledRejection', (e) => log('[main] unhandledRejection', e));
+
+function watchWindow(win, name) {
+  const wc = win.webContents;
+  wc.on('preload-error', (_e, file, err) => log(`[${name}] preload-error`, file, err));
+  wc.on('render-process-gone', (_e, d) => log(`[${name}] render-process-gone`, JSON.stringify(d)));
+  wc.on('did-fail-load', (_e, code, desc, url) => log(`[${name}] did-fail-load`, code, desc, url));
+  wc.on('console-message', (e, level, message, line, source) => {
+    // Electron 35+ memberi satu objek event; versi lama memberi argumen terpisah
+    const d = e && e.message !== undefined ? e : { level, message, lineNumber: line, sourceId: source };
+    const lv = typeof d.level === 'string' ? d.level : ['verbose', 'info', 'warning', 'error'][d.level] || 'info';
+    if (lv === 'warning' || lv === 'error') log(`[${name}:${lv}]`, d.message, `(${d.sourceId}:${d.lineNumber})`);
+  });
+}
 const { spawn } = require('child_process');
 const {
   app, BrowserWindow, Tray, Menu, screen, ipcMain, globalShortcut, shell, nativeImage, dialog, powerMonitor,
@@ -210,6 +242,7 @@ function createOverlay() {
   overlay.setAlwaysOnTop(true, 'screen-saver');
   overlay.setIgnoreMouseEvents(true, { forward: true });
   hoverNow = false;
+  watchWindow(overlay, 'overlay');
   overlay.setMenuBarVisibility(false);
   overlay.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   overlay.webContents.on('will-navigate', (e) => e.preventDefault());
@@ -314,6 +347,7 @@ function openSettings() {
   settingsWin.setMenu(null);
   settingsWin.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   settingsWin.webContents.on('will-navigate', (e) => e.preventDefault());
+  watchWindow(settingsWin, 'settings');
   settingsWin.loadFile(path.join(__dirname, '..', 'renderer', 'settings.html'));
   settingsWin.on('closed', () => (settingsWin = null));
 }
@@ -538,6 +572,7 @@ function setupIpc() {
 app.on('second-instance', () => notify({ id: 'si' + Date.now(), title: 'Pocket Notch sudah berjalan', message: 'Klik ikon tray untuk membuka Settings.', type: 'info', app: '', icon: '', duration: 4, time: Date.now() }));
 
 app.whenReady().then(async () => {
+  log('[main] start', app.getVersion(), process.versions.electron, app.isPackaged ? 'packaged' : 'dev');
   app.setAppUserModelId('com.pocketnotch.app');
   store = new Store();
   media = new Media({ mock: MOCK });
@@ -572,23 +607,37 @@ app.whenReady().then(async () => {
     }
   });
 
-  setupIpc();
-  createOverlay();
-  createTray();
-  registerShortcut();
-  media.on('state', onMediaState);
-  media.start();
-  devices.start();
-  setupShelf();
-  syncDeviceGroups();
+  // tiap langkah dilindungi: kegagalan satu bagian tidak mematikan bagian lain, dan tercatat di app.log
+  const step = (name, fn) => {
+    try {
+      return fn();
+    } catch (e) {
+      log('[main] langkah startup gagal:', name, e);
+    }
+  };
+  step('setupIpc', setupIpc);
+  step('createOverlay', createOverlay);
+  step('createTray', createTray);
+  step('registerShortcut', registerShortcut);
+  step('media', () => {
+    media.on('state', onMediaState);
+    media.start();
+  });
+  step('devices', () => devices.start());
+  step('setupShelf', setupShelf);
+  step('syncDeviceGroups', syncDeviceGroups);
   for (const evt of ['resume', 'unlock-screen']) {
     powerMonitor.on(evt, () => {
       // bangun ulang jendela overlay: setelah sleep/lock, status klik-tembus jendela lama bisa macet
       setTimeout(recreateOverlay, 1500);
     });
   }
-  await startServer();
-  updater.init();
+  try {
+    await startServer();
+  } catch (e) {
+    log('[main] startServer gagal', e);
+  }
+  step('updater', () => updater.init());
   if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: !!store.get().autoLaunch, name: 'PocketNotch' });
 
   const rePlace = () => {
