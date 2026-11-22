@@ -27,7 +27,8 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   width: var(--w); height: var(--h);
   border-radius: var(--rt) var(--rt) var(--r) var(--r);
   transition: width var(--dur) var(--ease), height var(--dur) var(--ease),
-              border-radius var(--dur) var(--ease), top var(--dur) var(--ease);
+              border-radius var(--dur) var(--ease), top var(--dur) var(--ease),
+              opacity .9s ease, filter .9s ease;
   isolation: isolate;
 }
 html[data-float='1'] .island { --rt: var(--r); --top: 10px; }
@@ -41,6 +42,46 @@ html[data-float='1'] .island { --rt: var(--r); --top: 10px; }
 .island[data-view='panel'][data-tab='ai']    { --w: 580px; --h: 384px; }
 .island[data-view='panel'][data-tab='inbox'] { --w: 520px; --h: 330px; }
 .island[data-view='panel'][data-tab='shelf'] { --w: 500px; --h: 300px; }
+
+/* ───────── muncul, hilang, tidur, bangun ───────── */
+.island.pre-intro { opacity: 0; }
+.island.intro { animation: introIn calc(.95s / var(--speed)) cubic-bezier(.22, 1.2, .36, 1) both; }
+@keyframes introIn {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(-70%) scale(.45, .3); filter: blur(7px) brightness(2.2); }
+  55%  { opacity: 1; transform: translateX(-50%) translateY(5%) scale(1.07, 1.06); filter: blur(0) brightness(1.5); }
+  100% { opacity: 1; transform: translateX(-50%); filter: none; }
+}
+.island.intro::after { animation: introGlow calc(.95s / var(--speed)) ease-out; }
+@keyframes introGlow { 40% { opacity: 1; filter: blur(calc(24px * var(--glow))); } }
+
+.island.vanish { animation: vanishOut calc(.4s / var(--speed)) cubic-bezier(.5, 0, .75, 0) both; pointer-events: none; }
+@keyframes vanishOut {
+  to { opacity: 0; transform: translateX(-50%) translateY(-55%) scale(.55, .35); filter: blur(6px) brightness(1.6); }
+}
+
+.island.wake { animation: wakePop calc(.75s / var(--speed)) var(--ease); }
+@keyframes wakePop {
+  0%   { transform: translateX(-50%) scale(.94); filter: brightness(.7); }
+  45%  { transform: translateX(-50%) scale(1.08, 1.12); filter: brightness(1.6) drop-shadow(0 0 14px var(--c1)); }
+  100% { transform: translateX(-50%); filter: none; }
+}
+
+html[data-sleep='1'] .island[data-view='idle'] {
+  --w: calc(var(--idle-w) - 28px); opacity: .6;
+  animation: sleepBreath 4.6s ease-in-out infinite;
+}
+html[data-sleep='1'] .island[data-view='idle'] .idle-time { opacity: .55; text-shadow: 0 0 4px var(--c3); }
+html[data-sleep='1'] .island[data-view='idle'] .idle-time .colon { animation-duration: 2.8s; }
+@keyframes sleepBreath { 0%, 100% { filter: brightness(.75) saturate(.7); } 50% { filter: brightness(1.05) saturate(1); } }
+html[data-fx='lite'][data-sleep='1'] .island[data-view='idle'] { animation: none; filter: brightness(.8); }
+
+.zzz { position: absolute; right: 12px; top: 1px; display: none; pointer-events: none; font-size: 13px; line-height: 1; color: var(--c2); }
+.zzz i { position: absolute; font-style: normal; opacity: 0; text-shadow: 0 0 6px var(--c2); animation: zfloat 3.2s ease-in-out infinite; }
+.zzz i:nth-child(2) { animation-delay: 1.05s; font-size: 15px; }
+.zzz i:nth-child(3) { animation-delay: 2.1s; font-size: 18px; }
+@keyframes zfloat { 0% { opacity: 0; transform: translate(0, 8px); } 25% { opacity: .9; } 100% { opacity: 0; transform: translate(10px, -9px); } }
+html[data-sleep='1'] .island[data-view='idle'] .zzz { display: block; }
+html[data-fx='lite'] .zzz { display: none !important; }
 
 /* ears: sudut atas melengkung keluar & menyatu dengan tepi layar (seperti notch iPhone) */
 .ear { position: absolute; top: 0; width: var(--ear); height: var(--ear); z-index: 3; pointer-events: none; display: none; }

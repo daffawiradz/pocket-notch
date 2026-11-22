@@ -41,6 +41,9 @@ const DEFAULTS = {
   glow: 1,
   hoverExpand: true,
   hideOnFullscreen: true,
+  hideOnLock: true, // sembunyikan notch & senyapkan popup saat layar terkunci
+  idleAnim: true, // animasi tidur saat perangkat idle
+  idleAfter: 60, // detik tanpa input sebelum dianggap idle
   shelf: { enabled: true, keepHours: 24, maxItems: 20 },
   miniMusic: true,
   showLyricsMini: true,
@@ -197,6 +200,9 @@ class Store {
     if (!['anthropic', 'openai'].includes(d.ai.provider)) d.ai.provider = 'anthropic';
     d.devices.lowBattery = Math.round(num(d.devices.lowBattery, 5, 50, 20));
     d.hideOnFullscreen = d.hideOnFullscreen !== false;
+    d.hideOnLock = d.hideOnLock !== false;
+    d.idleAnim = d.idleAnim !== false;
+    d.idleAfter = Math.round(num(d.idleAfter, 15, 600, 60));
     d.shelf.enabled = d.shelf.enabled !== false;
     d.shelf.keepHours = Math.round(num(d.shelf.keepHours, 1, 720, 24));
     d.shelf.maxItems = Math.round(num(d.shelf.maxItems, 3, 50, 20));

@@ -249,9 +249,12 @@ function createOverlay() {
   overlay.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   overlay.webContents.on('will-navigate', (e) => e.preventDefault());
   placeOverlay();
-  overlay.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  overlay.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'), { query: { intro: '1' } });
   overlay.once('ready-to-show', () => {
-    if (!fsHidden) overlay.showInactive();
+    if (hiddenNow) return;
+    overlay.showInactive();
+    const w = overlay;
+    setTimeout(() => send(w, 'overlay:intro'), 80);
   });
   if (process.argv.includes('--dev')) overlay.webContents.openDevTools({ mode: 'detach' });
 
@@ -275,7 +278,10 @@ function recreateOverlay() {
   if (old && !old.isDestroyed()) old.destroy();
 }
 
-let fsHidden = false; // overlay disembunyikan karena ada aplikasi fullscreen di monitor yang sama
+let fsHidden = false; // ada aplikasi fullscreen di monitor yang sama
+let lockHidden = false; // layar terkunci
+let hiddenNow = false; // overlay sedang disembunyikan (salah satu di atas)
+let idleState = false;
 let fsInfo = null; // { l, t, r, b } kotak monitor (piksel fisik) bila ada aplikasi fullscreen
 
 // apakah aplikasi fullscreen berada di monitor tempat notch?
@@ -291,20 +297,50 @@ function fullscreenOnNotchDisplay() {
 
 function applyFullscreenState() {
   if (!overlay || overlay.isDestroyed()) return;
-  const hide = fullscreenOnNotchDisplay();
-  if (hide === fsHidden) return;
-  fsHidden = hide;
+  fsHidden = fullscreenOnNotchDisplay();
+  applyHidden();
+}
+
+// Notch disembunyikan (fullscreen di monitor yang sama / layar terkunci) = mode senyap.
+// Saat tampil kembali, jendela overlay SELALU dibuat baru: jendela lama yang pernah disembunyikan
+// bisa mewarisi status klik-tembus/z-order yang macet (penyebab tombol freeze setelah fullscreen).
+function applyHidden() {
+  if (!overlay || overlay.isDestroyed()) return;
+  const hide = fsHidden || lockHidden;
+  if (hide === hiddenNow) return;
+  hiddenNow = hide;
+  hoverNow = false;
   if (hide) {
-    hoverNow = false;
-    overlay.hide();
+    log('[main] notch disembunyikan (fullscreen=' + fsHidden + ', lock=' + lockHidden + ')');
+    send(overlay, 'overlay:quiet', true);
+    send(overlay, 'overlay:vanish');
+    const w = overlay;
+    setTimeout(() => {
+      if (hiddenNow && w === overlay && !w.isDestroyed()) w.hide();
+    }, 420);
   } else {
-    placeOverlay();
-    overlay.showInactive();
-    overlay.setAlwaysOnTop(true, 'screen-saver');
+    log('[main] notch ditampilkan kembali, overlay dibangun ulang');
+    recreateOverlay();
   }
 }
 
+// animasi idle: dikirim saat sistem tidak ada input lebih dari idleAfter detik
+function pollIdle() {
+  if (!overlay || overlay.isDestroyed()) return;
+  const s = store.get();
+  let idle = false;
+  try {
+    idle = !!s.idleAnim && !hiddenNow && powerMonitor.getSystemIdleTime() >= s.idleAfter;
+  } catch (_) {
+    idle = false;
+  }
+  if (idle === idleState) return;
+  idleState = idle;
+  send(overlay, 'overlay:idle', idle);
+}
+
 let hoverTimer = null;
+let idleTimer = null;
 let islandRect = null;
 let hoverNow = false;
 let lastInput = 0; // kapan renderer terakhir benar-benar menerima input mouse
@@ -314,7 +350,7 @@ let moveStart = 0; // awal gerakan kursor yang tidak terputus
 let lastHeal = 0;
 
 function pollCursor() {
-  if (!overlay || overlay.isDestroyed() || fsHidden || !overlay.isVisible() || !islandRect) return;
+  if (!overlay || overlay.isDestroyed() || hiddenNow || !overlay.isVisible() || !islandRect) return;
   const cur = screen.getCursorScreenPoint();
   const inside = isInside(cur, overlay.getBounds(), islandRect, 4);
   const now = Date.now();
@@ -467,7 +503,9 @@ function applySettings(patch) {
   }
   buildTray();
   if (devices) syncDeviceGroups();
+  if (!s.hideOnLock && lockHidden) lockHidden = false;
   applyFullscreenState();
+  pollIdle();
 }
 
 function testNotify(type = 'sent') {
@@ -524,8 +562,25 @@ function setupIpc() {
     if (lastLyrics) send(overlay, 'media:lyrics', lastLyrics);
     send(overlay, 'update', updater.state());
     if (shelf) send(overlay, 'shelf:items', shelf.list());
+    send(overlay, 'overlay:quiet', hiddenNow);
+    send(overlay, 'overlay:idle', idleState);
   });
 
+  ipcMain.on('overlay:diag', (e, msg, data) => {
+    if (!overlay || e.sender !== overlay.webContents) return;
+    let ctx = {};
+    try {
+      ctx = { hoverNow, fsHidden, rect: islandRect, bounds: overlay.getBounds(), cursor: screen.getCursorScreenPoint(), visible: overlay.isVisible(), focusable: overlay.isFocusable() };
+    } catch (_) {}
+    let d = '';
+    try { d = JSON.stringify(data).slice(0, 700); } catch (_) {}
+    log('[diag] ' + msg + ' ' + d + ' | main=' + JSON.stringify(ctx));
+    if (data && data.heal && Date.now() - lastHeal > 10000) {
+      lastHeal = Date.now();
+      log('[main] klik diabaikan, overlay dibangun ulang');
+      recreateOverlay();
+    }
+  });
   ipcMain.on('overlay:input', (e) => {
     if (overlay && e.sender === overlay.webContents) lastInput = Date.now();
   });
@@ -654,12 +709,22 @@ app.whenReady().then(async () => {
   step('devices', () => devices.start());
   step('setupShelf', setupShelf);
   step('syncDeviceGroups', syncDeviceGroups);
-  for (const evt of ['resume', 'unlock-screen']) {
-    powerMonitor.on(evt, () => {
-      // bangun ulang jendela overlay: setelah sleep/lock, status klik-tembus jendela lama bisa macet
-      setTimeout(recreateOverlay, 1500);
-    });
-  }
+  powerMonitor.on('lock-screen', () => {
+    if (!store.get().hideOnLock) return;
+    lockHidden = true;
+    applyHidden();
+  });
+  powerMonitor.on('unlock-screen', () => {
+    // jendela lama bisa macet setelah lock: bangun ulang (lewat applyHidden bila tadi disembunyikan)
+    if (lockHidden) {
+      lockHidden = false;
+      setTimeout(applyHidden, 700);
+    } else if (!hiddenNow) setTimeout(recreateOverlay, 1500);
+  });
+  powerMonitor.on('resume', () => {
+    if (!hiddenNow) setTimeout(recreateOverlay, 1500);
+  });
+  idleTimer = setInterval(pollIdle, 1000);
   try {
     await startServer();
   } catch (e) {
@@ -695,6 +760,7 @@ app.on('window-all-closed', (e) => e.preventDefault()); // tetap hidup di tray
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   clearInterval(topmostTimer);
+  clearInterval(idleTimer);
   if (media) media.stop();
   if (devices) devices.stop();
   if (notifyServer) notifyServer.stop();

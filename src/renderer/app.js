@@ -447,6 +447,12 @@
 
   function pushNotif(n) {
     if (!n.noInbox) addInbox(n);
+    if (state.quiet) {
+      // mode senyap (layar terkunci / aplikasi fullscreen): masuk inbox saja, tanpa popup & suara
+      if (state.tab !== 'inbox' || !state.expanded) state.unread++;
+      updateBadge();
+      return;
+    }
     reactToNotif(n);
     if (state.expanded) {
       if (state.tab !== 'inbox') state.unread++;
@@ -627,6 +633,36 @@
       api.inputSeen();
     }
   };
+  // diagnosis: klik tab yang tidak mengganti tab = renderer macet -> catat bukti ke app.log dan bangun ulang overlay
+  const desc = (el) => (el && el.tagName ? el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + (typeof el.className === 'string' && el.className ? '.' + el.className.trim().split(/\s+/).join('.') : '') : 'null');
+  let downBtn = null;
+  document.addEventListener('pointerdown', (e) => {
+    downBtn = e.target && e.target.closest ? e.target.closest('#tabs button') : null;
+    if (downBtn) downBtn._at = [e.clientX, e.clientY, e.target];
+  }, true);
+  document.addEventListener('pointerup', () => {
+    const b = downBtn;
+    downBtn = null;
+    if (!b) return;
+    const [x, y, tg] = b._at || [0, 0, null];
+    setTimeout(() => {
+      if (state.tab === b.dataset.tab) return;
+      api.diag('tab klik diabaikan', {
+        want: b.dataset.tab,
+        tab: state.tab,
+        view: island.dataset.view,
+        expanded: state.expanded,
+        dragging: state.dragging,
+        pinned: state.pinned,
+        target: desc(tg),
+        top: desc(document.elementFromPoint(x, y)),
+        active: desc(document.activeElement),
+        heal: true,
+      });
+    }, 350);
+  }, true);
+  window.addEventListener('error', (e) => api.diag('renderer error', { m: e.message, f: e.filename, l: e.lineno }));
+  window.addEventListener('unhandledrejection', (e) => api.diag('renderer rejection', { m: String(e.reason && e.reason.message || e.reason) }));
   island.addEventListener('mousemove', seen);
   island.addEventListener('pointerdown', seen, true);
   function sendRect() {
@@ -1064,7 +1100,7 @@
   let hudT = null;
   let lastVolSay = 0;
   function showHud(h) {
-    if (state.expanded || !h) return;
+    if (state.expanded || state.quiet || !h) return;
     const el = $('#hud');
     let glyph = 'volume';
     let label = 'VOL';
@@ -1114,6 +1150,53 @@
 
   // ───────────────────────── events dari main ─────────────────────────
   api.onSettings(applySettings);
+
+  // ── muncul / hilang / tidur ──
+  const clearFx = () => island.classList.remove('pre-intro', 'intro', 'vanish', 'wake');
+  if (new URLSearchParams(location.search).get('intro') === '1') {
+    island.classList.add('pre-intro');
+    setTimeout(() => island.classList.remove('pre-intro'), 4000); // pengaman bila event intro tidak datang
+  }
+  island.addEventListener('animationend', (e) => {
+    if (e.animationName === 'introIn') island.classList.remove('intro');
+    if (e.animationName === 'wakePop') island.classList.remove('wake');
+  });
+  api.onIntro(() => {
+    clearFx();
+    void island.offsetWidth;
+    island.classList.add('intro');
+  });
+  api.onVanish(() => {
+    clearFx();
+    island.classList.add('vanish');
+  });
+  api.onQuiet((q) => {
+    state.quiet = !!q;
+    if (state.quiet) {
+      state.queue = [];
+      state.hud = null;
+      if (state.notif) {
+        clearTimeout(notifTimer);
+        state.notif = null;
+      }
+      render();
+    }
+  });
+  api.onIdle((idle) => {
+    root.dataset.sleep = idle ? '1' : '0';
+    if (idle) {
+      if (!playing()) {
+        pet.sleeping = true;
+        pet.render();
+      }
+    } else {
+      clearFx();
+      void island.offsetWidth;
+      island.classList.add('wake');
+      pet.touch();
+      pet.react('happy', 1600);
+    }
+  });
   api.onNotify(pushNotif);
   api.onToggleAI(() => {
     if (state.expanded && state.tab === 'ai') closePanel();
