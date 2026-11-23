@@ -10,6 +10,9 @@ const { Shelf } = require('../src/main/shelf');
 const { findArt, pick: pickArt, _setFetch: setArtFetch } = require('../src/main/art');
 const { isInside, validRect } = require('../src/main/hit');
 const { createRouter, SAMPLES } = require('../src/main/device-router');
+const focus = require('../src/shared/focus');
+const mascot = require('../src/shared/pet-art');
+const petMotion = require('../src/shared/pet-motion');
 
 let pass = 0;
 const t = async (name, fn) => {
@@ -18,6 +21,91 @@ const t = async (name, fn) => {
 };
 
 (async () => {
+  await t('focus: mulai, jeda, lanjut, selesai, reset tanpa drift timer', () => {
+    let s = focus.create(25);
+    assert.strictEqual(focus.format(s), '25:00');
+    s = focus.start(s, 1000);
+    assert.strictEqual(s.endsAt, 1501000);
+    assert.strictEqual(focus.format(s, 61000), '24:00');
+    assert.strictEqual(Math.round(focus.progress(s, 751000) * 100), 50);
+    s = focus.pause(s, 61000);
+    assert.strictEqual(s.status, 'paused');
+    assert.strictEqual(focus.remaining(s, 200000), 24 * 60000);
+    s = focus.start(s, 200000);
+    assert.strictEqual(s.endsAt, 1640000);
+    assert.strictEqual(focus.isComplete(s, 1640000), true);
+    assert.strictEqual(focus.format(s, 1640000), '00:00');
+    assert.strictEqual(focus.reset(s, 15).minutes, 15);
+    assert.strictEqual(focus.normalize({ minutes: 250, status: 'running' }).minutes, 25);
+  });
+
+  await t('maskot: semua persona dan mood punya SVG valid dan warna bawaan', () => {
+    for (const p of Object.values(PX.PERSONAS)) {
+      for (const mood of mascot.moods) {
+        const art = mascot.svg(p, mood, { blink: false, mouthOpen: true });
+        assert.match(art, /^<svg /);
+        assert.match(art, /viewBox="0 0 24 22"/);
+        assert.ok(art.includes(p.colors.body));
+        assert.ok(art.endsWith('</svg>'));
+      }
+    }
+    assert.strictEqual(mascot.svg(null), '');
+    assert.ok(!mascot.svg({colors:{body:'<script>',accent:'<script>',cheek:'<script>'}},'idle').includes('<script>'));
+  });
+
+  await t('maskot: aktivitas idle tidak berulang dalam 4 giliran', () => {
+    const recent = [];
+    for (let i = 0; i < 70; i++) {
+      const item = petMotion.nextActivity(recent, () => (i % 3) / 3);
+      assert.ok(item.duration >= 1000 && item.duration <= 4000);
+      assert.ok(!recent.includes(item.id), item.id + ' diulang terlalu cepat');
+      recent.push(item.id);
+      if (recent.length > 4) recent.shift();
+    }
+    assert.ok(petMotion.activities.some((a) => a.travel));
+    assert.ok(petMotion.activities.some((a) => !a.travel));
+  });
+
+  await t('maskot: jalur full notch, arah bolak-balik dan tempo sesuai lebar', () => {
+    const small = petMotion.walkBounds(172, 21);
+    const wide = petMotion.walkBounds(296, 21);
+    assert.deepStrictEqual(small, { min: 0, max: 139 });
+    assert.deepStrictEqual(wide, { min: 0, max: 263 });
+    assert.deepStrictEqual(petMotion.walkBounds(17, 21), { min: 0, max: 0 });
+    assert.strictEqual(petMotion.nextPatrolTarget(0, small, () => 0), 139);
+    assert.strictEqual(petMotion.nextPatrolTarget(139, small, () => 0), 0);
+    assert.ok(petMotion.nextPatrolTarget(0, small, () => 1) > 132);
+    assert.ok(petMotion.nextPatrolTarget(139, small, () => 1) < 7);
+    assert.ok(petMotion.walkDuration('patrol', wide.max) > petMotion.walkDuration('patrol', small.max));
+    const recent = [];
+    for (let i = 0; i < 40; i++) {
+      const a = petMotion.nextActivity(recent, () => (i % 5) / 5, true);
+      assert.ok(!recent.includes(a.id), `gerakan ${a.id} tidak boleh berulang`);
+      recent.push(a.id);
+      if (recent.length > 4) recent.shift();
+    }
+  });
+
+  await t('maskot: persona dan jenis interaksi punya respons bervariasi', () => {
+    for (const persona of Object.keys(PX.PERSONAS)) {
+      for (const type of ['tap', 'double', 'hold', 'hover']) {
+        const recentActions = [], recentLines = [];
+        for (let i = 0; i < 15; i++) {
+          const reaction = petMotion.nextReaction(type, persona, recentActions, recentLines, () => (i % 4) / 4);
+          assert.ok(mascot.moods.includes(reaction.mood));
+          assert.ok(reaction.line.length > 5);
+          assert.ok(!recentLines.includes(reaction.lineId), reaction.lineId);
+          recentActions.push(reaction.action);
+          recentLines.push(reaction.lineId);
+          if (recentActions.length > 4) recentActions.shift();
+          if (recentLines.length > 4) recentLines.shift();
+        }
+      }
+    }
+    assert.strictEqual(petMotion.blinkDelay(() => 0), 2600);
+    assert.strictEqual(petMotion.blinkDelay(() => 1), 7700);
+  });
+
   await t('parseLrc basic + multi stamp + offset', () => {
     const l = parseLrc('[offset:+500]\n[00:10.50]Hello\n[00:05.00][01:00.00]Chorus\n[00:20]\n');
     assert.deepStrictEqual(l.map((x) => x.text), ['Chorus', 'Hello', '', 'Chorus']);

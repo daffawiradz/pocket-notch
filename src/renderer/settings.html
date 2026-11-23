@@ -8,9 +8,12 @@
   <link rel="stylesheet" href="settings.css" />
 </head>
 <body>
-  <div class="drag"><span>POCKET NOTCH</span></div>
+  <div class="drag"><span class="drag-logo">P</span><span>POCKET NOTCH <em>/ CONTROL CENTER</em></span></div>
   <main>
-    <h1>SETTINGS <small id="ver" title=""></small><span class="saved" id="saved">SAVED ✓</span></h1>
+    <div class="settings-intro"><div><span class="eyebrow">PERSONALIZE YOUR POCKET</span><h1>CONTROL CENTER <small id="ver" title=""></small></h1><p>Atur notch, karakter, animasi, dan fitur Windows sesuai caramu bekerja.</p></div><span class="saved" id="saved">✓ TERSIMPAN</span></div>
+    <div class="settings-nav" id="settingsNav" aria-label="Navigasi pengaturan"></div>
+    <div class="settings-search-wrap"><span>⌕</span><input type="search" id="settingsSearch" placeholder="Cari pengaturan, misalnya tema, lirik, karakter…" aria-label="Cari pengaturan"/><button type="button" id="clearSearch" hidden>HAPUS</button></div>
+    <div class="settings-empty" id="settingsEmpty" hidden>Tidak ada pengaturan yang cocok.</div>
 
     <section>
       <h2>// DISPLAY & POSISI</h2>
@@ -39,6 +42,7 @@
 
     <section>
       <h2>// KARAKTER</h2>
+      <div class="pet-preview"><div class="pet-preview-art" id="petPreviewArt"></div><div><span class="eyebrow">YOUR DESKTOP FRIEND</span><strong id="petPreviewName">POKI</strong><small id="petPreviewTag">Ceria & penyemangat</small><span class="pet-preview-status">● PREVIEW LIVE</span></div></div>
       <label class="chk"><input type="checkbox" data-k="pet.enabled" /> Tampilkan karakter pendamping di notch</label>
       <label>Persona
         <select data-k="pet.persona">
@@ -211,6 +215,8 @@
       <p class="hint">Mode developer otomatis aktif saat dijalankan dari source. Di versi terpasang: klik nomor versi 7 kali.</p>
     </section>
   </main>
+  <script src="../shared/personas.js"></script>
+  <script src="../shared/pet-art.js"></script>
   <script src="settings.js"></script>
 </body>
 </html>

@@ -106,104 +106,153 @@
     island.dataset.view = computeView();
     island.dataset.tab = state.tab;
     island.dataset.playing = playing() ? '1' : '0';
+    if (typeof pet !== 'undefined') pet.syncMotion();
   }
 
 
-  // ───────────────────────── karakter (pet) ─────────────────────────
+  // ───────────────────────── karakter (pet): motion director & interaksi ─────────────────────────
   const PX = window.PERSONAS;
+  const MOTION = window.PET_MOTION;
   const petOn = () => !!(state.s && state.s.pet && state.s.pet.enabled);
   const personaNow = () => PX.resolve(state.s && state.s.pet);
-
-  const BODY = [
-    '............',
-    '............',
-    '..oooooooo..',
-    '.obbbbbbbbo.',
-    'obbbbbbbbbbo',
-    'obbbbbbbbbbo',
-    'obbbbbbbbbbo',
-    'obcbbbbbbcbo',
-    'obbbbbbbbbbo',
-    '.obbbbbbbbo.',
-    '..ooo..ooo..',
-    '............',
-  ];
-  const ACC = {
-    antenna: { rows: { 0: '.....aa.....', 1: '.....aa.....' }, extra: [] },
-    headphones: { rows: { 0: '...aaaaaa...', 1: '..a......a..' }, extra: [[0, 4], [0, 5], [0, 6], [11, 4], [11, 5], [11, 6]] },
-    horns: { rows: { 0: '.a........a.', 1: '.aa......aa.' }, extra: [] },
-  };
-  const EYE = {
-    normal: { k: [[3, 5], [4, 5], [3, 6], [4, 6], [7, 5], [8, 5], [7, 6], [8, 6]], w: [[3, 5], [7, 5]] },
-    blink: { k: [[3, 6], [4, 6], [7, 6], [8, 6]] },
-    happy: { k: [[2, 6], [3, 5], [4, 6], [7, 6], [8, 5], [9, 6]] },
-    sleep: { k: [[2, 6], [3, 6], [4, 6], [7, 6], [8, 6], [9, 6]] },
-    sad: { k: [[3, 5], [4, 5], [3, 6], [4, 6], [7, 5], [8, 5], [7, 6], [8, 6]], t: [[3, 7], [8, 7]] },
-    think: { k: [[4, 4], [5, 4], [4, 5], [5, 5], [8, 4], [9, 4], [8, 5], [9, 5]], w: [[4, 4], [8, 4]] },
-  };
-  const MOUTH = {
-    smile: [[4, 8], [5, 9], [6, 9], [7, 8]],
-    flat: [[5, 8], [6, 8]],
-    open: [[5, 8], [6, 8], [5, 9], [6, 9]],
-    frown: [[4, 9], [5, 8], [6, 8], [7, 9]],
-    small: [[5, 8]],
-  };
-  const MOOD = {
-    idle: ['normal', 'flat'], happy: ['happy', 'smile'], talk: ['normal', 'open'], dance: ['happy', 'smile'],
-    think: ['think', 'small'], sad: ['sad', 'frown'], sleep: ['sleep', 'small'],
-  };
-
-  function spriteSVG(persona, stateName, blink, mouthOpen) {
-    const col = { o: '#2a1247', b: persona.colors.body, c: persona.colors.cheek, a: persona.colors.accent, k: '#1a0b2e', w: '#ffffff', t: '#7fdcff' };
-    const acc = ACC[persona.accessory] || ACC.antenna;
-    const paths = {};
-    const add = (ch, x, y) => (paths[ch] = paths[ch] || []).push(`M${x} ${y}h1v1h-1z`);
-    BODY.forEach((row, y) => {
-      const over = acc.rows[y];
-      for (let x = 0; x < 12; x++) {
-        const ch = over && over[x] !== '.' ? over[x] : row[x];
-        if (ch !== '.') add(ch, x, y);
-      }
-    });
-    acc.extra.forEach(([x, y]) => add('a', x, y));
-    let [eyeKey, mouthKey] = MOOD[stateName] || MOOD.idle;
-    if (blink && (eyeKey === 'normal' || eyeKey === 'think')) eyeKey = 'blink';
-    if (stateName === 'talk' && !mouthOpen) mouthKey = 'flat';
-    const eye = EYE[eyeKey];
-    ['k', 'w', 't'].forEach((c) => (eye[c] || []).forEach(([x, y]) => add(c, x, y)));
-    MOUTH[mouthKey].forEach(([x, y]) => add('k', x, y));
-    const d = Object.entries(paths).map(([k, v]) => `<path fill="${col[k]}" d="${v.join('')}"/>`).join('');
-    return `<svg viewBox="0 0 12 12" shape-rendering="crispEdges" aria-hidden="true">${d}</svg>`;
-  }
+  const spriteSVG = (persona, mood, blink, mouthOpen, gaze = 0) =>
+    window.PET_ART.svg(persona, mood, { blink, mouthOpen, gaze });
+  const motionReduced = () => root.dataset.fx === 'lite' || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const remember = (list, choice, max = 4) => { list.push(choice); if (list.length > max) list.shift(); };
 
   const pet = {
-    temp: null, tempT: null, hold: null, blink: false, mouth: false, sleeping: false, sig: '', lastActive: Date.now(),
+    temp: null, tempT: null, hold: null, blink: false, mouth: false, sleeping: false, sig: '',
+    gaze: 0, lastActive: Date.now(), idleMood: null, action: '', actionT: null,
+    motionT: null, motionAnim: null, position: 0, facing: 1, recentIdle: [],
+    recentReactions: [], recentLines: [], lastHover: 0, lastInteraction: 0,
     cur() {
-      return this.hold || this.temp || (this.sleeping ? 'sleep' : playing() ? 'dance' : 'idle');
+      return this.hold || this.temp || (this.sleeping ? 'sleep' : playing() ? 'dance' :
+        state.focus && state.focus.status === 'running' ? 'think' : this.idleMood || 'idle');
+    },
+    canWander() {
+      return petOn() && !state.quiet && !state.over && !document.hidden &&
+        computeView() === 'idle' && !this.sleeping && !this.temp && !this.hold &&
+        !playing() && !(state.focus && state.focus.status === 'running') && !motionReduced();
     },
     render() {
-      if (!petOn()) return;
+      if (!petOn()) { this.stopMotion(); return; }
       const st = this.cur();
       const p = personaNow();
-      const sig = `${p.id}|${st}|${this.blink}|${this.mouth}`;
-      if (sig === this.sig) return;
-      this.sig = sig;
-      const html = spriteSVG(p, st, this.blink, this.mouth);
-      $$('.pet-slot').forEach((el) => {
-        el.dataset.state = st;
-        el.innerHTML = html;
-      });
+      const sig = `${p.id}|${st}|${this.blink}|${this.mouth}|${this.gaze}|${this.action}`;
+      if (sig !== this.sig) {
+        this.sig = sig;
+        const html = spriteSVG(p, st, this.blink, this.mouth, this.gaze);
+        $$('.pet-slot').forEach((el) => {
+          el.dataset.state = st;
+          el.dataset.action = this.action;
+          el.innerHTML = html;
+        });
+      }
+      this.syncMotion();
     },
-    react(st, ms) {
+    syncMotion() {
+      if (!this.canWander()) {
+        if (this.idleMood || this.motionT || this.motionAnim) this.stopMotion();
+        return;
+      }
+      if (this.action || this.idleMood) return;
+      if (!this.motionT && !this.motionAnim) {
+        this.motionT = setTimeout(() => {
+          this.motionT = null;
+          this.wander();
+        }, MOTION.pauseDelay());
+      }
+    },
+    stopMotion(preservePosition = false) {
+      clearTimeout(this.motionT);
+      this.motionT = null;
+      const actor = $('#petRoam');
+      // An interaction must not teleport the mascot to the left end mid-walk.
+      if (preservePosition && actor && this.motionAnim) {
+        const matrix = new DOMMatrixReadOnly(getComputedStyle(actor).transform);
+        const bounds = MOTION.walkBounds($('#petLane').clientWidth, actor.offsetWidth);
+        this.position = Math.min(bounds.max, Math.max(bounds.min, matrix.m41));
+        this.facing = matrix.m11 < 0 ? -1 : 1;
+      }
+      if (this.motionAnim) { this.motionAnim.cancel(); this.motionAnim = null; }
+      if (!preservePosition) { this.position = 0; this.facing = 1; }
+      if (actor) actor.style.transform = preservePosition
+        ? `translate3d(${this.position.toFixed(2)}px,0,0) scaleX(${this.facing})` : '';
+      if (this.idleMood || this.action) {
+        this.idleMood = null;
+        this.action = '';
+        this.sig = '';
+      }
+    },
+    wander() {
+      if (!this.canWander()) { this.stopMotion(); return; }
+      const actor = $('#petRoam');
+      const lane = $('#petLane');
+      if (!actor || !lane || !actor.animate) return;
+      const lastTwo = this.recentIdle.slice(-2);
+      const recentTravels = lastTwo.some((id) => MOTION.activities.some((a) => a.id === id && a.travel));
+      const activity = MOTION.nextActivity(this.recentIdle, Math.random,
+        !recentTravels || Math.random() < .62);
+      remember(this.recentIdle, activity.id);
+      this.idleMood = activity.mood;
+      this.action = activity.id;
+      this.gaze = Math.random() > .5 ? 1 : -1;
+      const bounds = MOTION.walkBounds(lane.clientWidth, actor.offsetWidth);
+      const from = Math.min(bounds.max, Math.max(bounds.min, this.position));
+      this.position = from;
+      const to = activity.travel ? MOTION.nextPatrolTarget(from, bounds) : from;
+      const dir = activity.travel ? (to >= from ? 1 : -1) : this.facing;
+      const at = (part, dy = 0, rot = 0, face = dir) => ({
+        transform: `translate3d(${(from + (to - from) * part).toFixed(2)}px, ${dy}px, 0) rotate(${rot}deg) scaleX(${face})`,
+      });
+      let poses;
+      if (activity.travel) {
+        const wiggle = activity.id === 'tiptoe' ? -2 : activity.id === 'skip' ? -5 : -3;
+        poses = [at(0, 0), at(.17, wiggle, -4), at(.34, 0, 4), at(.52, wiggle, -3), at(.7, 0, 3), at(.86, wiggle, -2), at(1)];
+        if (activity.id === 'moonwalk') poses = poses.map((v, i) => ({ ...v, transform: v.transform.replace(/scaleX\([^)]+\)/, `scaleX(${-dir})`) }));
+      } else if (activity.id === 'twirl') {
+        poses = [at(0), at(0, -5, 90), at(0, -3, 205), at(0, -7, 320), at(0)];
+      } else if (activity.id === 'peek' || activity.id === 'look') {
+        poses = [at(0), at(0, -2, -10, -1), at(0, -2, 9, 1), at(0, 0, 0, this.facing)];
+      } else if (activity.id === 'stretch') {
+        poses = [at(0), at(0, -5, -5), at(0, -7, 6), at(0)];
+      } else if (activity.id === 'settle') {
+        poses = [at(0), at(0, 2), at(0, 3), at(0)];
+      } else {
+        poses = [at(0), at(0, -2, -5), at(0, -3, 5), at(0)];
+      }
+      this.render();
+      const duration = activity.travel ? MOTION.walkDuration(activity.id, Math.abs(to - from)) : activity.duration;
+      const anim = actor.animate(poses, { duration, easing: activity.travel ? 'linear' : 'ease-in-out', fill: 'forwards' });
+      this.motionAnim = anim;
+      anim.onfinish = () => {
+        if (this.motionAnim !== anim) return;
+        this.position = to;
+        this.facing = activity.id === 'moonwalk' ? -dir : dir;
+        actor.style.transform = at(1, 0, 0, this.facing).transform;
+        this.motionAnim = null;
+        anim.cancel();
+        this.idleMood = null;
+        this.action = '';
+        this.render();
+      };
+    },
+    react(st, ms, action = '') {
       clearTimeout(this.tempT);
+      this.stopMotion(true);
       this.temp = st;
+      this.action = action;
+      this.gaze = st === 'curious' || st === 'peek' ? (Math.random() > .5 ? 1 : -1) : 0;
       this.render();
       this.tempT = setTimeout(() => {
         this.temp = null;
+        this.action = '';
+        this.gaze = 0;
         this.render();
       }, ms);
     },
     setHold(st) {
+      if (st) this.stopMotion(true);
       this.hold = st;
       this.render();
     },
@@ -215,23 +264,68 @@
         sayKey('wake', {}, { state: 'happy' });
       }
     },
+    interact(kind, quiet = false) {
+      if (!petOn()) return;
+      this.touch();
+      const plan = MOTION.nextReaction(kind, personaNow().id, this.recentReactions, this.recentLines);
+      remember(this.recentReactions, plan.action);
+      remember(this.recentLines, plan.lineId);
+      this.lastInteraction = Date.now();
+      this.react(plan.mood, kind === 'double' ? 1900 : kind === 'hold' ? 2400 : 1400, plan.action);
+      if (!quiet) say(plan.line, { force: true, ms: kind === 'hold' ? 4200 : 3400, state: plan.mood, keepReaction: true });
+      else if (state.expanded) showHome(plan.line);
+      if (state.expanded) retrigger($('#petStage'), 'pet-tapped');
+    },
   };
 
-  // kedip & mulut bicara
-  setInterval(() => {
-    if (!petOn() || pet.cur() === 'sleep') return;
-    pet.blink = true;
-    pet.render();
+  // Kedipan asimetris: jeda acak, sesekali berkedip dua kali.
+  function blinkCycle() {
     setTimeout(() => {
-      pet.blink = false;
-      pet.render();
-    }, 130);
-  }, 3800);
+      if (petOn() && !pet.sleeping && !document.hidden) {
+        pet.blink = true;
+        pet.render();
+        setTimeout(() => { pet.blink = false; pet.render(); }, 110 + Math.random() * 90);
+        if (Math.random() > .80) setTimeout(() => {
+          if (!petOn() || pet.sleeping) return;
+          pet.blink = true; pet.render();
+          setTimeout(() => { pet.blink = false; pet.render(); }, 100);
+        }, 350);
+      }
+      blinkCycle();
+    }, MOTION.blinkDelay());
+  }
+  blinkCycle();
   setInterval(() => {
     if (pet.cur() !== 'talk') return;
     pet.mouth = !pet.mouth;
     pet.render();
-  }, 170);
+  }, 190);
+
+
+  // Variasi gerak kontekstual yang tidak memotong reaksi sentuhan, chat,
+  // atau notifikasi. Tidak memunculkan dialog secara acak saat pengguna fokus.
+  const contextActions = {
+    music: ['sway', 'hop', 'twirl', 'wave', 'nod'],
+    focus: ['look', 'nod', 'stretch', 'settle', 'peek'],
+    home: ['wave', 'peek', 'sway', 'nod', 'shy'],
+  };
+  let lastContext = '';
+  let contextRecent = [];
+  setInterval(() => {
+    if (!petOn() || pet.sleeping || pet.temp || pet.hold || state.quiet || document.hidden || motionReduced()) return;
+    const mode = playing() ? 'music' :
+      state.focus && state.focus.status === 'running' ? 'focus' :
+      state.expanded && state.tab === 'home' ? 'home' : '';
+    if (mode !== lastContext) { lastContext = mode; contextRecent = []; pet.action = ''; }
+    if (!mode) { pet.render(); return; }
+    const choices = contextActions[mode].map((id) => ({ id }));
+    const next = MOTION.pick(choices, contextRecent);
+    remember(contextRecent, next.id);
+    pet.action = next.id;
+    pet.gaze = ['peek', 'look'].includes(next.id) ? (Math.random() > .5 ? 1 : -1) : 0;
+    pet.sig = '';
+    pet.render();
+  }, 7400);
 
   // dialog
   let bubbleT = null;
@@ -254,7 +348,7 @@
     lastSayAt = now;
     const ms = opts.ms || 5500;
     showHome(text);
-    pet.react(opts.state || 'talk', Math.min(ms, 2400));
+    if (!opts.keepReaction) pet.react(opts.state || 'talk', Math.min(ms, 2400));
     if (state.expanded) return;
     $('#bubbleName').textContent = personaNow().name.toUpperCase();
     $('#bubbleText').textContent = text;
@@ -310,7 +404,7 @@
       nextTip = now + (25 + Math.random() * 20) * 60000;
       sayKey('tip', {}, { ms: 7000 });
     }
-    if (!pet.sleeping && !playing() && now - pet.lastActive > 10 * 60000) {
+    if (!pet.sleeping && !playing() && state.focus.status !== 'running' && now - pet.lastActive > 10 * 60000) {
       pet.sleeping = true;
       pet.render();
     }
@@ -319,6 +413,8 @@
   function onPetSettings() {
     pet.sig = '';
     pet.render();
+    $('#petTag').textContent = personaNow().name.toUpperCase() + ' · ONLINE';
+    $('#homePet').setAttribute('aria-label', `Colek ${personaNow().name}`);
     scheduleReminder();
     if (!onPetSettings.greeted && petOn()) {
       onPetSettings.greeted = true;
@@ -339,9 +435,10 @@
     root.style.setProperty('--glow', s.glow);
     root.dataset.pet = s.pet && s.pet.enabled ? '1' : '0';
     root.style.setProperty('--nh', s.notchHeight + 'px');
-    root.style.setProperty('--idle-w', 116 + (petOn() ? 30 : 0) + (s.showSeconds ? 62 : 0) + (s.clock24 ? 0 : 36) + 'px');
+    root.style.setProperty('--idle-w', 116 + (petOn() ? 56 : 0) + (s.showSeconds ? 62 : 0) + (s.clock24 ? 0 : 36) + 'px');
     updateMiniWidth($('#miniText').textContent);
     onPetSettings();
+    updateFocus();
     tick();
     state.lyIdx = -99;
     render();
@@ -368,11 +465,87 @@
     $('#miniTime').textContent = `${t.hh}:${t.mm}`;
     $('#homeTime').textContent = `${t.hh}:${t.mm}` + (sec ? `:${t.ss}` : '') + (t.ap ? ` ${t.ap}` : '');
     $('#homeDate').textContent = d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
+    $('#homeGreeting').textContent = d.getHours() < 11 ? 'GOOD MORNING / SELAMAT PAGI'
+      : d.getHours() < 16 ? 'GOOD AFTERNOON / SELAMAT SIANG'
+      : d.getHours() < 19 ? 'GOOD EVENING / SELAMAT SORE' : 'GOOD NIGHT / SELAMAT MALAM';
   }
   (function loop() {
     tick();
     setTimeout(loop, 1000 - (Date.now() % 1000) + 5);
   })();
+
+  // ───────────────────────── Focus Mode (timer lokal, tetap hidup saat tab berubah) ─────────────────────────
+  const FOCUS = window.NOTCH_FOCUS;
+  try { state.focus = FOCUS.normalize(JSON.parse(localStorage.getItem('notch.focus.v1') || 'null')); }
+  catch (_) { state.focus = FOCUS.create(); }
+
+  function saveFocus() {
+    try { localStorage.setItem('notch.focus.v1', JSON.stringify(state.focus)); } catch (_) { /* storage optional */ }
+  }
+
+  function updateFocus(now = Date.now()) {
+    const f = state.focus;
+    if (FOCUS.isComplete(f, now)) {
+      const recent = now - f.endsAt < 60000;
+      state.focus = FOCUS.reset(f);
+      saveFocus();
+      updateHome();
+      if (recent && state.s) {
+        pet.react('happy', 2400);
+        pushNotif({ id: 'focus' + now, type: 'success', title: 'Sesi fokus selesai ✦',
+          message: `${f.minutes} menit selesai. Waktunya istirahat sebentar!`, app: 'FOCUS MODE', duration: 7, time: now, noReact: true });
+        sayKey('focus_end', {}, { force: true, state: 'happy' });
+      }
+    }
+    const s = state.focus;
+    const active = s.status === 'running';
+    $('#focusClock').textContent = FOCUS.format(s, now);
+    $('#focusState').textContent = active ? '● IN PROGRESS' : s.status === 'paused' ? 'Ⅱ PAUSED' : '● READY';
+    $('#focusToggle').textContent = active ? 'PAUSE' : s.status === 'paused' ? 'RESUME' : 'START FOCUS';
+    $('#focusConsole').dataset.status = s.status;
+    $('#focusFill').style.width = (FOCUS.progress(s, now) * 100).toFixed(2) + '%';
+    $$('#focusModes button').forEach((b) => {
+      b.classList.toggle('selected', Number(b.dataset.minutes) === s.minutes);
+      b.disabled = s.status !== 'ready';
+    });
+    $('#idleFocus').hidden = !active;
+    $('#miniFocus').hidden = !active;
+    $('#idleFocusTime').textContent = FOCUS.format(s, now);
+    if (active !== updateFocus.lastActive) {
+      updateFocus.lastActive = active;
+      requestAnimationFrame(() => updateMiniWidth($('#miniText').textContent));
+      pet.action = '';
+      pet.sig = '';
+      pet.render();
+    }
+    // Padding idle hit-test ikut bertambah ketika timer ditampilkan.
+    const cfg = state.s;
+    if (cfg) root.style.setProperty('--idle-w', 116 + (petOn() ? 56 : 0) +
+      (cfg.showSeconds ? 62 : 0) + (cfg.clock24 ? 0 : 36) + (active ? 112 : 0) + 'px');
+  }
+
+  $('#focusToggle').addEventListener('click', () => {
+    const wasRunning = state.focus.status === 'running';
+    state.focus = wasRunning ? FOCUS.pause(state.focus) : FOCUS.start(state.focus);
+    saveFocus();
+    pet.touch();
+    if (wasRunning) pet.react('wink', 1500);
+    else sayKey('focus_start', {}, { force: true, state: 'think', ms: 2800 });
+    pet.render();
+    updateHome();
+    updateFocus();
+  });
+  $('#focusReset').addEventListener('click', () => {
+    state.focus = FOCUS.reset(state.focus);
+    saveFocus(); pet.render(); updateHome(); updateFocus();
+  });
+  $$('#focusModes button').forEach((btn) => btn.addEventListener('click', () => {
+    if (state.focus.status !== 'ready') return;
+    state.focus = FOCUS.reset(state.focus, Number(btn.dataset.minutes));
+    saveFocus(); updateFocus();
+  }));
+  updateFocus();
+  setInterval(() => { if (state.focus.status === 'running') updateFocus(); }, 250);
 
   // ───────────────────────── sound ─────────────────────────
   let actx = null;
@@ -558,6 +731,7 @@
 
   function setTab(t) {
     state.tab = t;
+    $$('#tabs button').forEach((b) => b.setAttribute('aria-current', b.dataset.tab === t ? 'page' : 'false'));
     api.setFocusable(t === 'ai' && state.expanded);
     if (t === 'ai') setTimeout(() => state.expanded && state.tab === 'ai' && aiInput.focus(), 200);
     else aiInput.blur();
@@ -573,6 +747,10 @@
     if (t === 'home') updateHome();
     if (t === 'shelf') renderShelf();
     render();
+    if (petOn() && !state.ai.busy && !pet.hold) {
+      const mood = { home: 'happy', ai: 'curious', music: 'excited', inbox: 'peek', shelf: 'proud' }[t];
+      pet.react(mood, 1150, t === 'music' ? 'sway' : t === 'shelf' ? 'nod' : 'peek');
+    }
   }
 
   function openPanel(tab) {
@@ -594,7 +772,10 @@
     $('#btnPin').classList.remove('on');
     api.setFocusable(false);
     aiInput.blur();
+    pet.action = '';
+    pet.sig = '';
     render();
+    pet.render();
     if (!state.notif && state.queue.length) nextNotif();
   }
 
@@ -701,7 +882,7 @@
     $('#btnPin').classList.toggle('on', state.pinned);
   });
   $('#btnSettings').addEventListener('click', () => api.openSettings());
-  $('#btnClose').addEventListener('click', closePanel);
+  $('#btnClose').addEventListener('click', (e) => { e.stopPropagation(); closePanel(); });
   $$('#tabs button').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));
   $$('[data-go]').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.go)));
 
@@ -731,6 +912,7 @@
     if (sig === lastSig) return;
     lastSig = sig;
     const has = m.active && m.title;
+    island.dataset.mediaActive = has ? '1' : '0';
     $('#mTitle').textContent = has ? m.title : 'Tidak ada musik';
     $('#mArtist').textContent = has ? m.artist || 'Unknown artist' : 'Putar lagu di Spotify / YouTube / dll';
     $('#mApp').textContent = has ? String(m.app || '').replace(/\.exe$/i, '').toUpperCase() : '';
@@ -751,7 +933,9 @@
 
   function updateHome() {
     const m = state.media;
-    $('#homeNow').textContent = playing() && m.title ? `♪ ${m.title}${m.artist ? ' — ' + m.artist : ''}` : '';
+    $('#homeNow').textContent = playing() && m.title ? `♪ ${m.title}${m.artist ? ' — ' + m.artist : ''}` : '♫  Belum ada musik yang diputar';
+    $('#homeStatus').textContent = playing() ? 'NOW PLAYING · ' + String(m.app || 'MUSIC').replace(/\.exe$/i, '').toUpperCase()
+      : state.focus && state.focus.status === 'running' ? 'FOCUS SESSION IN PROGRESS' : 'SYSTEM ONLINE · READY';
     const u = state.update;
     let t = '';
     if (u) {
@@ -763,7 +947,53 @@
     el.textContent = t;
     el.style.cursor = u && u.status === 'ready' ? 'pointer' : '';
   }
-  $('#homePet').addEventListener('click', () => sayKey('poke', {}, { force: true, state: 'happy', ms: 4000 }));
+  // Semua ukuran P-Notch bisa disentuh. Double click dan long press berbeda
+  // dari satu klik; interaksi di mini/idle tidak membuka panel secara tak sengaja.
+  $$('.pet-interactive, #homePet').forEach((el) => {
+    let holdTimer = null;
+    let tapTimer = null;
+    let held = false;
+    let pointerStart = null;
+    el.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      held = false;
+      pointerStart = [e.clientX, e.clientY];
+      clearTimeout(holdTimer);
+      holdTimer = setTimeout(() => {
+        held = true;
+        clearTimeout(tapTimer);
+        pet.interact('hold');
+      }, 620);
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (pointerStart && Math.hypot(e.clientX - pointerStart[0], e.clientY - pointerStart[1]) > 10) {
+        clearTimeout(holdTimer);
+        pointerStart = null;
+      }
+    });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach((type) => el.addEventListener(type, () => {
+      clearTimeout(holdTimer);
+      pointerStart = null;
+    }));
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (held) { held = false; return; }
+      clearTimeout(tapTimer);
+      tapTimer = setTimeout(() => pet.interact('tap'), 235);
+    });
+    el.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      clearTimeout(tapTimer);
+      if (!held) pet.interact('double');
+    });
+    el.addEventListener('pointerenter', () => {
+      const now = Date.now();
+      if (now - pet.lastHover > 16000 && now - pet.lastInteraction > 4500) {
+        pet.lastHover = now;
+        pet.interact('hover', true);
+      }
+    });
+  });
   $('#homeUpd').addEventListener('click', () => {
     if (state.update && state.update.status === 'ready') api.installUpdate();
   });
@@ -798,7 +1028,12 @@
     state.mediaAt = performance.now();
     updateMediaStatic();
     if (keyChanged) state.lyIdx = -99;
-    if (playing() !== wasPlaying) pet.render();
+    if (playing() !== wasPlaying) {
+      pet.action = '';
+      pet.sig = '';
+      pet.render();
+      if (playing()) pet.react('excited', 1450, 'twirl');
+    }
     if (playing()) pet.lastActive = Date.now();
     if (keyChanged && playing() && m.title && Date.now() - lastMusicSay > 25000 && Math.random() < 0.4) {
       lastMusicSay = Date.now();
@@ -887,7 +1122,7 @@
     if (s.miniAuto) {
       const m = $('#miniMeasure');
       m.textContent = text || '';
-      const overhead = 32 + 20 + 50 + 20 + 24;
+      const overhead = 32 + 20 + 50 + 20 + 24 + (state.focus && state.focus.status === 'running' ? 18 : 0);
       w = Math.min(s.miniMaxWidth, Math.max(280, Math.ceil((m.offsetWidth + overhead) / 20) * 20));
     }
     root.style.setProperty('--mini-w', w + 'px');
@@ -923,6 +1158,8 @@
     const d = document.createElement('div');
     d.className = 'msg ' + cls;
     d.textContent = text || '';
+    const empty = $('#aiEmpty');
+    if (empty) empty.hidden = true;
     aiLog.append(d);
     aiLog.scrollTop = aiLog.scrollHeight;
     return d;
@@ -956,32 +1193,34 @@
     pet.setHold('think');
     aiInput.value = '';
     aiInput.style.height = 'auto';
-    const res = await api.aiChat(state.ai.messages);
-    typing.remove();
-    pet.setHold(null);
-    if (!res || res.error) {
-      pet.react('sad', 2600);
-      addMsg('err', (res && res.error) || 'Gagal menghubungi AI.');
-      state.ai.messages.pop();
-    } else {
+    $('#aiSend').disabled = true;
+    try {
+      const res = await api.aiChat(state.ai.messages);
+      typing.remove();
+      if (!res || res.error) throw new Error((res && res.error) || 'Gagal menghubungi AI.');
       for (const a of res.actions || []) {
         let args = '';
-        try {
-          args = JSON.stringify(a.args || {});
-        } catch (_) {
-          /* abaikan */
-        }
+        try { args = JSON.stringify(a.args || {}); } catch (_) { /* abaikan */ }
         addMsg('tool', `⚙ ${a.tool}${args && args !== '{}' ? ' ' + args.slice(0, 60) : ''}`);
       }
       const el = addMsg('bot', '');
       if (petOn()) el.dataset.name = personaNow().name.toUpperCase();
       pet.react('happy', 1800);
-      state.ai.messages.push({ role: 'assistant', content: res.reply });
-      await typeInto(el, res.reply);
+      const reply = String(res.reply || 'Selesai.');
+      state.ai.messages.push({ role: 'assistant', content: reply });
+      await typeInto(el, reply);
+    } catch (e) {
+      typing.remove();
+      pet.react('sad', 2600);
+      addMsg('err', e && e.message ? e.message : 'Gagal menghubungi AI.');
+      state.ai.messages.pop();
+    } finally {
+      pet.setHold(null);
+      state.ai.busy = false;
+      $('#aiSend').disabled = false;
+      if (state.expanded && state.tab === 'ai') aiInput.focus();
+      if (!state.over && !holdOpen()) scheduleCollapse();
     }
-    state.ai.busy = false;
-    if (state.expanded && state.tab === 'ai') aiInput.focus();
-    if (!state.over && !holdOpen()) scheduleCollapse();
   }
 
   $('#aiForm').addEventListener('submit', (e) => {
@@ -1002,6 +1241,10 @@
   $('#aiClear').addEventListener('click', () => {
     state.ai.messages = [];
     aiLog.textContent = '';
+    const empty = document.createElement('div');
+    empty.className = 'ai-empty'; empty.id = 'aiEmpty';
+    empty.innerHTML = '<div class="ai-empty-glyph">✳</div><strong>HELLO, HUMAN.</strong><span>Ada yang bisa kubantu hari ini?</span>';
+    aiLog.append(empty);
   });
 
 
@@ -1158,23 +1401,28 @@
     setTimeout(() => island.classList.remove('pre-intro'), 4000); // pengaman bila event intro tidak datang
   }
   island.addEventListener('animationend', (e) => {
+    if (e.target !== island) return;
     if (e.animationName === 'introIn') island.classList.remove('intro');
     if (e.animationName === 'wakePop') island.classList.remove('wake');
+    if (e.animationName === 'vanishOut') api.vanishDone();
   });
   api.onIntro(() => {
     clearFx();
     void island.offsetWidth;
     island.classList.add('intro');
+    pet.react('curious', 900, 'peek');
   });
   api.onVanish(() => {
     clearFx();
     island.classList.add('vanish');
+    pet.stopMotion();
   });
   api.onQuiet((q) => {
     state.quiet = !!q;
     if (state.quiet) {
       state.queue = [];
       state.hud = null;
+      pet.stopMotion();
       if (state.notif) {
         clearTimeout(notifTimer);
         state.notif = null;

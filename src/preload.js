@@ -10,6 +10,7 @@ const on = (channel, cb) => {
 contextBridge.exposeInMainWorld('notch', {
   // overlay
   ready: () => ipcRenderer.send('overlay:ready'),
+  vanishDone: () => ipcRenderer.send('overlay:vanished'),
   setFocusable: (v) => ipcRenderer.send('overlay:focusable', !!v),
   onMedia: (cb) => on('media:state', cb),
   onLyrics: (cb) => on('media:lyrics', cb),

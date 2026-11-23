@@ -15,13 +15,25 @@
       <div class="grid-floor"></div>
 
       <!-- IDLE: jam -->
-      <section class="view v-idle"><span class="pet-slot pet-sm" data-pet></span><span class="idle-time" id="idleTime">00:00</span><span class="zzz" aria-hidden="true"><i>z</i><i>z</i><i>Z</i></span></section>
+      <section class="view v-idle">
+        <!-- P-Notch berjalan pada lapisan penuh, DI BELAKANG jam yang benar-benar centered. -->
+        <span class="pet-lane" id="petLane">
+          <span class="pet-roam" id="petRoam">
+            <button class="pet-slot pet-sm pet-interactive" data-pet type="button"
+              title="Klik, klik dua kali, atau tekan-tahan P-Notch"
+              aria-label="Berinteraksi dengan P-Notch"></button>
+          </span>
+        </span>
+        <span class="idle-time" id="idleTime">00:00</span>
+        <span class="idle-focus" id="idleFocus" hidden title="Sesi fokus sedang berjalan">◷ <span id="idleFocusTime">25:00</span></span>
+        <span class="zzz" aria-hidden="true"><i>z</i><i>z</i><i>Z</i></span>
+      </section>
 
       <!-- MINI: musik sedang diputar -->
       <section class="view v-mini">
-        <span class="pet-slot pet-sm" data-pet></span>
+        <button class="pet-slot pet-sm pet-interactive" data-pet type="button" title="Klik, klik dua kali, atau tekan-tahan P-Notch" aria-label="Berinteraksi dengan P-Notch"></button>
         <div class="eq"><i></i><i></i><i></i><i></i></div>
-        <div class="mini-text"><span id="miniText"></span></div>
+        <div class="mini-text"><span id="miniText"></span></div><span class="mini-focus" id="miniFocus" hidden title="Fokus aktif">◷</span>
         <span class="mini-time" id="miniTime"></span>
       </section>
 
@@ -47,7 +59,8 @@
       <!-- PANEL: tab -->
       <section class="view v-panel">
         <header class="p-head">
-          <nav class="tabs" id="tabs">
+          <div class="p-brand" title="Pocket Notch"><span class="brand-mark">P</span><span class="brand-name">NOTCH</span></div>
+          <nav class="tabs" id="tabs" aria-label="Navigasi Pocket Notch">
             <button data-tab="home">HOME</button>
             <button data-tab="music">MUSIC</button>
             <button data-tab="ai">AI</button>
@@ -63,19 +76,38 @@
 
         <!-- HOME -->
         <div class="tab t-home">
-          <div class="home-top">
-            <button class="pet-slot pet-lg" data-pet id="homePet" title="Colek"></button>
-            <div class="home-clock">
+          <div class="home-hero">
+            <div class="pet-stage" id="petStage">
+              <div class="pet-halo"></div>
+              <div class="pet-orbit orbit-one"></div><div class="pet-orbit orbit-two"></div>
+              <button class="pet-slot pet-lg" data-pet id="homePet" type="button" title="Klik: sapa · 2x klik: kejutan · tahan: elus" aria-label="Interaksi dengan karakter P-Notch"></button>
+              <div class="pet-shadow"></div>
+              <div class="pet-caption"><span class="status-dot"></span><span id="petTag">POKI · ONLINE</span></div>
+            </div>
+            <div class="home-overview">
+              <span class="eyebrow" id="homeGreeting">YOUR LITTLE DESKTOP COMPANION</span>
               <div class="home-time" id="homeTime">00:00</div>
               <div class="home-date" id="homeDate"></div>
+              <div class="home-status"><span class="status-dot"></span><span id="homeStatus">READY TO GO</span></div>
             </div>
           </div>
-          <div class="home-say" id="homeSay"></div>
-          <div class="home-now" id="homeNow"></div>
-          <div class="home-btns">
-            <button class="btn" data-go="music">MUSIK</button>
-            <button class="btn" data-go="ai">AI AGENT</button>
-            <button class="btn" data-go="inbox">INBOX</button>
+          <div class="home-say" id="homeSay" aria-live="polite">Punya sesuatu untuk dikerjakan? Aku di sini.</div>
+          <div class="focus-console" id="focusConsole">
+            <div class="focus-heading"><span class="focus-symbol">✦</span><span class="focus-label">FOCUS MODE</span><span class="focus-state" id="focusState">READY</span></div>
+            <div class="focus-main">
+              <span class="focus-clock" id="focusClock">25:00</span>
+              <div class="focus-modes" id="focusModes" aria-label="Durasi fokus">
+                <button type="button" data-minutes="15">15M</button><button type="button" data-minutes="25" class="selected">25M</button><button type="button" data-minutes="45">45M</button>
+              </div>
+              <button type="button" class="focus-start" id="focusToggle">START FOCUS</button>
+              <button type="button" class="focus-reset" id="focusReset" title="Ulangi timer" aria-label="Reset timer">↺</button>
+            </div>
+            <div class="focus-track" aria-hidden="true"><i id="focusFill"></i></div>
+          </div>
+          <div class="home-bottom"><div class="home-now" id="homeNow">♪ Belum ada musik yang diputar</div>
+            <div class="home-btns">
+              <button class="btn" data-go="music">MUSIC</button><button class="btn" data-go="ai">AI AGENT</button><button class="btn" data-go="inbox">INBOX</button>
+            </div>
           </div>
           <div class="home-upd" id="homeUpd"></div>
         </div>
@@ -105,12 +137,14 @@
             <div class="ly prev" id="lyPrev"></div>
             <div class="ly cur" id="lyCur"></div>
             <div class="ly next" id="lyNext"></div>
+            <div class="music-empty" id="musicEmpty"><span>♫</span><strong>READY WHEN YOU ARE</strong><small>Putar lagu dari Spotify, browser, atau VLC. Lirik akan hadir otomatis.</small></div>
           </div>
         </div>
 
         <!-- AI -->
         <div class="tab t-ai">
-          <div class="ai-log" id="aiLog"></div>
+          <div class="ai-kicker"><span class="status-dot"></span><span>AI COMPANION</span><span class="ai-hint">SHIFT + ENTER untuk baris baru</span></div>
+          <div class="ai-log" id="aiLog"><div class="ai-empty" id="aiEmpty"><div class="ai-empty-glyph">✳</div><strong>HELLO, HUMAN.</strong><span>Mau dengar musik, pasang timer, atau tanya sesuatu?</span></div></div>
           <div class="ai-chips" id="aiChips">
             <button data-q="Lagu apa yang sedang diputar?">Now playing?</button>
             <button data-q="Lanjut ke lagu berikutnya">Next lagu</button>
@@ -142,6 +176,9 @@
   </div>
   <span class="mini-measure" id="miniMeasure"></span>
   <script src="../shared/personas.js"></script>
+  <script src="../shared/pet-art.js"></script>
+  <script src="../shared/pet-motion.js"></script>
+  <script src="../shared/focus.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -280,7 +280,9 @@ function recreateOverlay() {
 
 let fsHidden = false; // ada aplikasi fullscreen di monitor yang sama
 let lockHidden = false; // layar terkunci
-let hiddenNow = false; // overlay sedang disembunyikan (salah satu di atas)
+let hiddenNow = false; // overlay disembunyikan (fullscreen, lock, atau tray)
+let trayHidden = false; // status hide manual; tidak mengubah aturan fullscreen/lock
+let hideFallback = null;
 let idleState = false;
 let fsInfo = null; // { l, t, r, b } kotak monitor (piksel fisik) bila ada aplikasi fullscreen
 
@@ -306,7 +308,7 @@ function applyFullscreenState() {
 // bisa mewarisi status klik-tembus/z-order yang macet (penyebab tombol freeze setelah fullscreen).
 function applyHidden() {
   if (!overlay || overlay.isDestroyed()) return;
-  const hide = fsHidden || lockHidden;
+  const hide = fsHidden || lockHidden || trayHidden;
   if (hide === hiddenNow) return;
   hiddenNow = hide;
   hoverNow = false;
@@ -315,13 +317,18 @@ function applyHidden() {
     send(overlay, 'overlay:quiet', true);
     send(overlay, 'overlay:vanish');
     const w = overlay;
-    setTimeout(() => {
+    // ACK dari renderer menunggu animasi CSS benar-benar selesai; fallback bila ACK gagal
+    // (mis. renderer dibekukan saat lock/fullscreen).
+    clearTimeout(hideFallback);
+    hideFallback = setTimeout(() => {
       if (hiddenNow && w === overlay && !w.isDestroyed()) w.hide();
-    }, 420);
+    }, Math.ceil(520 / Math.max(.4, Number(store.get().animSpeed) || 1)) + 350);
   } else {
+    clearTimeout(hideFallback);
     log('[main] notch ditampilkan kembali, overlay dibangun ulang');
     recreateOverlay();
   }
+  if (tray) buildTray();
 }
 
 // animasi idle: dikirim saat sistem tidak ada input lebih dari idleAfter detik
@@ -424,10 +431,11 @@ function buildTray() {
     { label: 'Pocket Notch  v' + app.getVersion(), enabled: false },
     { type: 'separator' },
     {
-      label: overlay && overlay.isVisible() ? 'Sembunyikan notch' : 'Tampilkan notch',
+      label: hiddenNow ? 'Tampilkan notch' : 'Sembunyikan notch',
       click: () => {
         if (!overlay) return;
-        overlay.isVisible() ? overlay.hide() : overlay.showInactive();
+        trayHidden = !hiddenNow;
+        applyHidden();
         buildTray();
       },
     },
@@ -556,6 +564,11 @@ function onMediaState(s) {
 
 // ───────────────────────── IPC ─────────────────────────
 function setupIpc() {
+  ipcMain.on('overlay:vanished', (e) => {
+    if (!overlay || overlay.isDestroyed() || e.sender !== overlay.webContents || !hiddenNow) return;
+    clearTimeout(hideFallback);
+    overlay.hide();
+  });
   ipcMain.on('overlay:ready', () => {
     send(overlay, 'settings', store.publicView());
     if (lastMedia.active) send(overlay, 'media:state', { ...lastMedia, thumb: lastThumb && lastThumb.key === lastMedia.key ? lastThumb.thumb : null });
